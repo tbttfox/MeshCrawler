@@ -6,6 +6,7 @@ original as closely as possible
 """
 import numpy as np
 from itertools import chain, izip_longest
+from Qt.QtWidgets import QApplication
 
 def mergeCycles(groups):
 	"""
@@ -97,10 +98,11 @@ def buildHint(island, neigh, borders):
 				return b
 	return None
 
-def partitionIslands(faces, neigh):
+def partitionIslands(faces, neigh, pBar=None):
 	""" Find all groups of connected verts """
 	allVerts = set(chain.from_iterable(faces))
 	islands = []
+	count = float(len(allVerts))
 	while allVerts:
 		verts = set([allVerts.pop()])
 		exclude = set()
@@ -108,43 +110,53 @@ def partitionIslands(faces, neigh):
 			verts, exclude = grow(neigh, verts, exclude)
 		islands.append(exclude)
 		allVerts.difference_update(exclude)
+
+		if pBar is not None:
+			pBar.set("Detecting Islands", (count - len(allVerts)) / count)
+
 	return islands
 
-def buildUnsubdivideHints(faces, neigh, borders):
+def buildUnsubdivideHints(faces, neigh, borders, pBar=None):
 	""" Get one vertex per island that was part of the original mesh """
 	islands = partitionIslands(faces, neigh)
-	hints = [buildHint(i, neigh, borders) for i in islands]
+	hints = []
+	for i, isle in enumerate(islands):
+		if pBar is not None:
+			pBar.set("Gathering Island Hints", i/float(len(islands)))
+		hints.append(buildHint(isle, neigh, borders))
+
 	hints = [h for h in hints if h is not None]
 	return hints
 
-def getFaceCenterDel(faces, eNeigh, hints):
+def getFaceCenterDel(faces, eNeigh, hints, pBar=None):
 	"""
 	Given a list of hint "keeper" points
 	Return a list of points that were created at the
-	centers of the original faces
-
-	This function can optionally raise an error
-	when a non-subdivided mesh is encountered
-
-	To complete the unsubdivide, just get the edges
-	connected to these verts, and delete them, removing
-	their connected vertices
+	centers of the original faces during a subdivision
 	"""
 	vertToFaces = {}
+	vc = set()
 	for i, face in enumerate(faces):
 		for f in face:
 			vertToFaces.setdefault(f, []).append(i)
+			vc.add(f)
 
+	count = float(len(vc))
 	centers = set()
 	midpoints = set()
 	originals = set(hints)
 	queue = set(hints)
 
+	i = 0
 	fail = False
 	while queue:
 		cur = queue.pop()
 		if cur in midpoints:
 			continue
+
+		if pBar is not None:
+			pBar.set("Partitioning Vertices", i/count)
+			i += 2 # Add 2 because I *shouldn't* get any midpoints
 
 		midpoints.update(eNeigh[cur])
 		t = centers if cur in originals else originals
@@ -497,7 +509,7 @@ def deleteCenters(meshFaces, uvFaces, centerDel):
 
 	return newFaces, nUVFaces, wings, uvWings
 
-def fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned):
+def fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned, pBar=None):
 	"""
 	Given the faces, vertex positions, and the point indices that
 	were created at the face centers for a subdivision step
@@ -520,16 +532,23 @@ def fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned):
 	# bowtie verts are pinned
 	bowTieIdxs = []
 	computed = set()
+	i = 0
+	count = float(len(verts))
 
 	for idx in uIdxs:
+		if pBar is not None:
+			pBar.set("Solving positions", i/count)
 		if len(uNeighDict[idx]) > 1:
 			bowTieIdxs.append(idx)
+			i += 1
 		elif idx in pinned:
 			pass
 		elif idx in borders:
 			_findOldPositionBorder(faces, uFaces, verts, uVerts, neighDict, uNeighDict, borders, idx, computed)
+			i += 1
 		elif sum(map(len, uNeighDict[idx])) > 6: # if valence > 3
 			_findOldPositionSimple(faces, uFaces, verts, uVerts, neighDict, uNeighDict, idx, computed)
+			i += 1
 		else:
 			v3Idxs.append(idx)
 
@@ -541,6 +560,9 @@ def fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned):
 			up = _findOldPosition3Valence(faces, uFaces, verts, uVerts, neighDict, uNeighDict, idx, computed)
 			if not up:
 				continue
+			if pBar is not None:
+				pBar.set("Solving positions", i/count)
+			i += 1
 			updated = True
 			rem.add(idx)
 		v3Idxs = list(set(v3Idxs) - rem)
@@ -607,12 +629,15 @@ def unsubdivide(faces, verts, uvFaces, uvs, hints=None, repositionVerts=True, pi
 		hints = buildUnsubdivideHints(faces, eNeigh, borders)
 	centerDel, fail = getFaceCenterDel(faces, eNeigh, hints)
 	assert not fail, "Could not detect subdivided topology with the provided hints"
+
 	uFaces, uUVFaces, dWings, uvDWings = deleteCenters(faces, uvFaces, centerDel)
 	if repositionVerts:
+		# Handle the verts
 		neighDict, uNeighDict, borders = buildLayeredNeighborDicts(faces, uFaces, dWings)
 		pinned = set(borders) if pinBorders else []
 		uVerts = fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned)
 
+		# Handle the UVs
 		uvNeighDict, uUVNeighDict, uvBorders = buildLayeredNeighborDicts(uvFaces, uUVFaces, uvDWings)
 		uvPinned = getUVPins(faces, borders, uvFaces, uvBorders, pinBorders)
 		uUVs = fixVerts(uvFaces, uUVFaces, uvs, uvNeighDict, uUVNeighDict, uvBorders, uvPinned)

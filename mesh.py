@@ -29,12 +29,14 @@ class Mesh(object):
 		Faces are ccw wound
 
 		The idea for this data structure is to keep all the data in one place and have the
-		individual convenience objects reference back to it
-		Storing in one place means I can store it efficiently
+		individual convenience objects reference back to it. Storing in one place means I
+		can store it efficiently, and allow for efficient editing and querying. The
+		convenience layer on top means you can get "good enough" performance for high-level
+		tasks without having to directly manipulate the underlying data.
 
-		This doesn't really handle non-manifold geometry, nor should it.
+		This will error out with non-manifold geometry. This is a feature not a bug ;)
 
-		The only strange one is "Edge Adjacency", and this borrows some data from
+		The only strange property is "Edge Adjacency", and this borrows some data from
 		the winged edge structure. Given two neighboring vertices, return the bordering
 		faces. The first face contains the vertices wound backwards (clockwise),
 		the second face contains the vertices wound forwards (counter clockwise)
@@ -48,13 +50,11 @@ class Mesh(object):
 		Float Data:
 			vertArray			: array of 3d floats
 			normalArray			: array of 3d floats
-			uvs					: default uvs. Array of 2d floats
 			uvMap				: map of d[name] => array of 2d floats
 
 		Face Data:
 			faceVertArray		: 2d array of vertex indices per face
-			faceUVs				: 2d array of UV indices per face
-			faceUVMap			: map of d[name] => 2d array of UV indices per face
+			uvFaceMap			: map of d[name] => 2d array of UV indices per face
 
 		Vert Data:
 			vertToFaces			: 2d array of face indices per vert
@@ -69,21 +69,22 @@ class Mesh(object):
 	def __init__(self, verts, faces, uvs=None, uvFaces=None, uvMap=None, uvFaceMap=None, ensureWinding=False):
 		self._verts = None
 		self._faces = None
-		self._uvs = None
-		self._uvFaces = None
+		self._uvs = {}
+		self._uvFaces = {}
 		self._wound = ensureWinding
 
 		self.children = []
 		# load the float data
 		self.vertArray = verts
 		self.uvMap = uvMap or {}
-		self.uvMap['default'] = uvs
+		if uvs:
+			self.uvMap['default'] = uvs
 
 		# build the empty face data
 		self.faceVertArray = faces
-		self.faceUVArray = uvFaces
-		self.faceUVMap = uvFaceMap or {}
-		self.faceUVMap['default'] = self.faceUVArray
+		self.uvFaceMap = uvFaceMap or {}
+		if uvFaces:
+			self.uvFaceMap['default'] = uvFaces
 
 		vertToFaces = {}
 		neighborDict = {}
@@ -412,15 +413,29 @@ class Mesh(object):
 		ret.update(range(len(self.faceVertArray)))
 		return ret
 
-	def uvs(self, channelName):
+	def uvs(self, channelName='default'):
 		""" Get all UV convenience objects
 
 		Returns:
 			list: List of UV objects
 		"""
 		if channelName not in self._uvs:
-			self._uvs[channelName] = [UV(self, channelName, i) for i in xrange(len(self.faceUVArray[channelName]))]
-		return self._uvs[channelName]
+			uvm = self.uvMap.get(channelName)
+			if uvm is not None:
+				self._uvs[channelName] = [UV(self, channelName, i) for i in uvm]
+		return self._uvs.get(channelName)
+
+	def uvFaces(self, channelName='default'):
+		""" Get all UV convenience objects
+
+		Returns:
+			list: List of UV objects
+		"""
+		if channelName not in self._uvFaces:
+			uvfm = self.uvFaceMap.get(channelName, [])
+			if uvfm is not None:
+				self._uvFaces[channelName] = [UVFace(self, channelName, i) for i in uvfm]
+		return self._uvFaces.get(channelName)
 
 	def isBorderVert(self, vertIdx):
 		""" Check if the given vertex index is along a border
@@ -447,11 +462,13 @@ class Mesh(object):
 				out.update(edge)
 		return out
 
-	def clear(self):
-		""" Remove all cached convenience classes """
+	def clearCache(self):
+		""" Clear all cached convenience classes """
 		self._verts = None
 		self._faces = None
 		self._uvs = {}
+		self._uvFaces = {}
+		self.children = []
 
 #######################################################################################
 
@@ -476,15 +493,6 @@ class MeshComponent(object):
 		""" Remove all reference data from this object """
 		self.mesh = None
 		self.mesh.children.remove(self)
-
-	def value(self):
-		""" Get the value of the object
-		This is an abstract prototype
-
-		Returns:
-			None
-		"""
-		return None
 
 	def __eq__(self, other):
 		if isinstance(other, type(self)):
@@ -613,7 +621,7 @@ class UV(MeshComponent):
 		Returns:
 			tuple: (u, v) position
 		"""
-		return self.mesh.uvArray[self.name][self.index]
+		return self.mesh.uvMap[self.name][self.index]
 
 	def setValue(self, pos):
 		""" Set the uv's position
@@ -623,7 +631,7 @@ class UV(MeshComponent):
 		"""
 		t = tuple(pos)
 		assert len(t) == 2
-		self.mesh.uvArray[self.name][self.index] = t
+		self.mesh.uvMap[self.name][self.index] = t
 
 	def __hash__(self):
 		return hash(self.name, self.index)
@@ -631,6 +639,11 @@ class UV(MeshComponent):
 
 class UVFace(MeshComponent):
 	''' A convenience class for accessing and manipulating faces '''
+	__slot__ = 'mesh', 'index', 'name'
+	def __init__(self, mesh, name, index):
+		self.name = name
+		super(UVFace, self).__init__(mesh, index)
+
 	def __eq__(self, other):
 		if isinstance(other, UVFace):
 			return set(self.uvs()) == set(other.uvs())
@@ -640,24 +653,22 @@ class UVFace(MeshComponent):
 		return hash(self.verts())
 
 	def verts(self):
-		""" Get all verts that make up this face
+		""" Get all verts that make up this UVFace
 
 		Returns:
 			list: List of vertexes that make up this face
 		"""
-		raise NotImplementedError()
 		idxs = self.mesh.faceVertArray[self.index]
 		verts = self.mesh.verts()
 		return [verts[i] for i in idxs]
 
 	def uvs(self, name='default'):
-		""" Get all uvs that make up this face
+		""" Get all uvs that make up this UVFace
 
 		Returns:
 			list: List of uvs that make up this face
 		"""
-		raise NotImplementedError()
-		idxs = self.mesh.faceUVArray[name][self.index]
+		idxs = self.mesh.uvFaceMap[name][self.index]
 		uvs = self.mesh.uvs(name)
 		return [uvs[i] for i in idxs]
 
@@ -735,7 +746,7 @@ class MeshSet(set):
 		else:
 			return newGrown
 
-	def partitionIslands(self, growMethod):
+	def _partitionIslands(self, growMethod):
 		''' Separate the current set into sets of neighboring objects
 
 		Args:
@@ -768,9 +779,6 @@ class MeshSet(set):
 
 class VertSet(MeshSet):
 	""" A set-like object that deals with vertices """
-	def __init__(self, mesh, indices=None):
-		super(VertSet, self).__init__(mesh, indices)
-
 	def growByEdge(self, exclude=None, track=False):
 		""" Add verts that share edges with the current set
 		Args:
@@ -799,14 +807,11 @@ class VertSet(MeshSet):
 		Returns:
 			list(VertSet): A list of interconnected object sets
 		'''
-		return super(VertSet, self).partitionIslands(self.mesh.adjacentVertsByFace)
+		return super(VertSet, self)._partitionIslands(self.mesh.adjacentVertsByFace)
 
 
 class FaceSet(MeshSet):
 	""" A set-like object that deals with faces """
-	def __init__(self, mesh, indices=None):
-		super(FaceSet, self).__init__(mesh, indices)
-
 	def growByEdge(self, exclude=None, track=False):
 		""" Add faces that share edges with the current set
 		Args:
@@ -835,5 +840,5 @@ class FaceSet(MeshSet):
 		Returns:
 			list(FaceSet): A list of interconnected object sets
 		'''
-		return super(FaceSet, self).partitionIslands(self.mesh.adjacentFacesByVert)
+		return super(FaceSet, self)._partitionIslands(self.mesh.adjacentFacesByVert)
 

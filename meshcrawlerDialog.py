@@ -269,9 +269,6 @@ class MeshCrawlerDialog(Dialog):
 			if selectVert is not None:
 				selectVert(obj, data)
 
-
-
-
 	def _crawlAdvanced(self, pairs, orderMesh, shapeMesh, pBar):
 		ois = [frozenset(i) for i in partitionIslands(orderMesh)]
 		sis = [frozenset(i) for i in partitionIslands(shapeMesh)]

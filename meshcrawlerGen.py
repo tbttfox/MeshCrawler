@@ -1,13 +1,13 @@
 #pylint:disable=missing-docstring,invalid-name
 '''
-This specific file is geared towards making generators that
-yield possible match pairs
-'''
-import blurdev
-import sys, copy, time, itertools
+Here are a bunch of functions, generators, and co-processes
+that are made to allow for a UI easily increment over a set
+of possibilities defined by my heuristics.
 
-from meshcrawlerLib import matchByTopology
-from meshcrawlerErrors import TopologyMismatch, IslandMismatch
+'''
+import itertools
+from MeshCrawler.meshcrawlerLib import matchByTopology
+from MeshCrawler.meshcrawlerErrors import TopologyMismatch, IslandMismatch
 
 from Qt.QtWidgets import QApplication
 

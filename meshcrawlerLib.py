@@ -12,30 +12,27 @@ info), and matched ordered pairs, and either returns a set of vertex matches,
 or raises an error
 '''
 
-import blurdev
-import sys, copy, time
-from meshcrawlerErrors import TopologyMismatch
-
+from MeshCrawler.meshcrawlerErrors import TopologyMismatch
 from Qt.QtWidgets import QApplication
 
 ###################################################
 ###				  Match Point Order				###
 ###################################################
 
-def flipMultiDict(e, f):
+def flipMultiDict(eDict, fDict):
 	""" Make a dict keyed off the values of two dicts
 
 	Args:
-		e,f: Two dictionaries with hashable values
+		eDict,fDict: Two dictionaries with hashable values
 
 	Returns:
 		A dictionary in this form: (eValueSet,fValueSet):key
 	"""
 	inv = {}
-	allkeys = set(e.keys()) | set(f.keys())
-	for k in allkeys:
-		eVal = frozenset(e.get(k, ()))
-		fVal = frozenset(f.get(k, ()))
+	allKeys = eDict.viewkeys() | fDict.viewkeys()
+	for k in allKeys:
+		eVal = frozenset(eDict.get(k, ()))
+		fVal = frozenset(fDict.get(k, ()))
 		inv.setdefault((eVal, fVal), []).append(k)
 	return inv
 
