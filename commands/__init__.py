@@ -1,15 +1,11 @@
 try:
-	from .maxCommands import (getSingleSelection, getObjectByName, getObjectName, rootWindow,
-						  getFaces, getVerts, createRawObject, selectVerts, getVertSelection)
+	from .maxCommands import (cloneObject, createRawObject, freezeObject, getFaces, getObjectByName, getObjectName, getSingleSelection, getUVs, getVerts, getVertSelection, rootWindow, selectVerts, setAllVerts, setObjectName)
 except ImportError:
 	try:
-		from .mayaCommands import (getSingleSelection, getObjectByName, getObjectName, rootWindow,
-						  getFaces, getVerts, createRawObject, selectVerts, getVertSelection)
+		from .mayaCommands import (cloneObject, createRawObject, freezeObject, getFaces, getObjectByName, getObjectName, getSingleSelection, getUVs, getVerts, getVertSelection, rootWindow, selectVerts, setAllVerts, setObjectName)
 	except ImportError:
 		try:
-			from .xsiCommands import (getSingleSelection, getObjectByName, getObjectName, rootWindow,
-						  getFaces, getVerts, createRawObject, selectVerts, getVertSelection)
+			from .xsiCommands import (cloneObject, createRawObject, freezeObject, getFaces, getObjectByName, getObjectName, getSingleSelection, getUVs, getVerts, getVertSelection, rootWindow, selectVerts, setAllVerts, setObjectName)
 		except ImportError:
-			from .externalCommands import (getSingleSelection, getObjectByName, getObjectName, rootWindow,
-						  getFaces, getVerts, createRawObject, selectVerts, getVertSelection)
+			from .externalCommands import (cloneObject, createRawObject, freezeObject, getFaces, getObjectByName, getObjectName, getSingleSelection, getUVs, getVerts, getVertSelection, rootWindow, selectVerts, setAllVerts, setObjectName)
 
