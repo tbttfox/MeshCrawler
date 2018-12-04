@@ -57,6 +57,16 @@ def getVerts(thing):
 	maxVerts = [op.getVert(thing, i + 1) for i in xrange(op.getNumVerts(thing))]
 	return np.array([(p.x, p.y, p.z) for p in maxVerts])
 
+def getUVs(thing):
+	uvCount = mxs.polyop.getNumMapVerts(thing, 1)
+	faceCount = mxs.polyop.getNumMapFaces(thing, 1)
+
+	uvPoints = [mxs.polyop.getMapVert(thing, 1, i+1) for i in xrange(uvCount)]
+	uvs = [(i.x, i.y) for i in uvPoints]
+	uvFaces = [mxs.polyop.getMapFace(thing, 1, i+1) for i in xrange(faceCount)]
+
+	return uvs, uvFaces
+
 def createRawObject(name, faces, verts, uvFaces, uvs):
 	mm = mxs.mesh(numverts=len(verts))
 	oldUndo = mxs.execute("set undo off")
@@ -71,7 +81,7 @@ def createRawObject(name, faces, verts, uvFaces, uvs):
 			mxs.polyop.createPolygon(mm, fPlus)
 
 		if uvs is not None:
-			mxs.polyop.defaultMapFaces(mm, 1)
+			#mxs.polyop.defaultMapFaces(mm, 1)
 			mxs.polyop.setNumMapVerts(mm, 1, len(uvs), keep=False)
 			mxs.polyop.setNumMapFaces(mm, 1, len(uvFaces), keep=False)
 
@@ -111,6 +121,29 @@ def selectVerts(obj, idx):
 
 def getVertSelection(obj):
 	return obj.selectedVerts[0]
+
+def cloneObject(obj, name):
+	cl = mxs.snapshot(obj)
+	cl.name = name
+	return cl
+
+def freezeObject(obj):
+	mxs.convertTo(obj, mxs.PolyMeshObject)
+
+def setObjectName(obj, newName):
+	obj.name = newName
+
+def setAllVerts(obj, newVerts):
+	if mxs.classOf(obj) == mxs.XRefObject:
+		obj = obj.actualBaseObject
+	if mxs.classOf(obj) in [mxs.Editable_Poly, mxs.PolyMeshObject]:
+		maxAll = mxs.execute('#all')
+		maxPos = [mxs.point3(*i) for i in newVerts]
+		mxs.polyop.setVert(obj, maxAll, maxPos)
+	else:
+		for i, v in enumerate(newVerts):
+			mxs.setVert(obj, i + 1, *v)
+	return True
 
 def rootWindow():
 	"""

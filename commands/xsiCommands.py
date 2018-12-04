@@ -28,7 +28,8 @@ def getVerts(thing):
 	verts = np.array(vertArray)
 	return verts.T
 
-def getUVs(thing):
+def _getUVs(thing):
+	""" Get the direct xsi uvws (without indexing) """
 	texName = "Texture_Projection"
 	texProp = None
 	textureCls = [cluster for cluster in thing.ActivePrimitive.Geometry.Clusters if cluster.Type == "sample"]
@@ -38,10 +39,12 @@ def getUVs(thing):
 			break
 
 	if texProp is None:
-		return None, None
+		return None
 
-	# Get all the expanded uvs from xsi
-	bigUvs = zip(*texProp.Elements.Array)
+	return  zip(*texProp.Elements.Array)
+
+def getUVs(thing):
+	bigUvs = _getUVs(thing)
 
 	# Make a dict that keeps track of the first index
 	# each uv value is found at
@@ -130,42 +133,18 @@ def getVertSelection(obj):
 
 def cloneObject(obj, name):
 	vertArray, faceArray = obj.ActivePrimitive.Geometry.Get2()
-	return _createRawObject(name, faceArray, vertArray, uvws=None)
+	uvws = _getUVs(obj)
+	return _createRawObject(name, faceArray, vertArray, uvws=uvws)
 
 def freezeObject(obj):
-	cmds.delete(obj, constructionHistory=True)
+	xsi.FreezeObj(obj)
 
 def setObjectName(obj, newName):
-	cmds.rename(obj, newName)
+	obj.Name = newName
 
 def setAllVerts(obj, newVerts):
-	# Get the api objects
-	sel = om.MSelectionList()
-	sel.add(obj)
-	dagPath = om.MDagPath()
-	sel.getDagPath(0, dagPath)
-	fnMesh = om.MFnMesh(dagPath)
-
-	# Build the scriptUtil object
-	ptCount = fnMesh.numVertices()
-	util = om.MScriptUtil()
-	util.createFromList([0.0] * (4 * ptCount), 4 * ptCount)
-	ptr = util.asFloat4Ptr()
-
-	# Get the scriptUtil object as a pointer in numpy
-	cta = (c_float * 4 * ptCount).from_address(int(ptr))
-	out = np.ctypeslib.as_array(cta)
-
-	# Copy the input values into the pointer
-	out[:, :3] = newVerts
-
-	# Set the vert positions
-	fnMesh.setPoints(om.MFloatPointArray(ptr, ptCount))
-
-
-
-
-
+	verts = newVerts.T.tolist()
+	obj.ActivePrimitive.Geometry.Points.PositionArray = verts
 
 def rootWindow():
 	"""

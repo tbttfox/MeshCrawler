@@ -142,8 +142,8 @@ def getVertSelection(obj):
 			return int(s.split('[')[:-1])
 	return None
 
-def cloneObject(obj):
-	return cmds.duplicate(obj)[0]
+def cloneObject(obj, name):
+	return cmds.duplicate(obj, name=name)[0]
 
 def freezeObject(obj):
 	cmds.delete(obj, constructionHistory=True)
