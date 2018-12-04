@@ -50,6 +50,41 @@ def getVerts(thing):
 	# for safety, make a copy of out so I don't corrupt memory
 	return np.copy(out)
 
+def getUVs(thing):
+	# Get the MDagPath from the name of the mesh
+	sl = om.MSelectionList()
+	sl.add(thing)
+	thing = om.MDagPath()
+	sl.getDagPath(0, thing)
+	meshFn = om.MFnMesh(thing)
+
+	vIdx = om.MIntArray()
+	util = om.MScriptUtil()
+	util.createFromInt(0)
+	uvIdxPtr = util.asIntPtr()
+	uArray = om.MFloatArray()
+	vArray = om.MFloatArray()
+	meshFn.getUVs(uArray, vArray)
+	hasUvs = uArray.length() > 0
+
+	uvFaces = []
+	for i in range(meshFn.numPolygons()):
+		meshFn.getPolygonVertices(i, vIdx)
+		face = []
+		uvFace = []
+		for j in reversed(xrange(vIdx.length())):
+			face.append(vIdx[j])
+			if hasUvs:
+				meshFn.getPolygonUVid(i, j, uvIdxPtr)
+				uvIdx = util.getInt(uvIdxPtr)
+				if uvIdx >= uArray.length() or uvIdx < 0:
+					uvIdx = 0
+				uvFace.append(uvIdx)
+		uvFaces.append(uvFace)
+
+	uvs = [(uArray[i], vArray[i]) for i in xrange(uArray.length())]
+	return uvs, uvFaces
+
 def createRawObject(name, faces, verts, uvFaces, uvs):
 	dup = cmds.polyPlane(name=name, constructionHistory=False)[0]
 	sel = om.MSelectionList()
@@ -106,4 +141,79 @@ def getVertSelection(obj):
 		if s.startswith(obj):
 			return int(s.split('[')[:-1])
 	return None
+
+def cloneObject(obj):
+	return cmds.duplicate(obj)[0]
+
+def freezeObject(obj):
+	cmds.delete(obj, constructionHistory=True)
+
+def setObjectName(obj, newName):
+	cmds.rename(obj, newName)
+
+def setAllVerts(obj, newVerts):
+	# Get the api objects
+	sel = om.MSelectionList()
+	sel.add(obj)
+	dagPath = om.MDagPath()
+	sel.getDagPath(0, dagPath)
+	fnMesh = om.MFnMesh(dagPath)
+
+	# Build the scriptUtil object
+	ptCount = fnMesh.numVertices()
+	util = om.MScriptUtil()
+	util.createFromList([0.0] * (4 * ptCount), 4 * ptCount)
+	ptr = util.asFloat4Ptr()
+
+	# Get the scriptUtil object as a pointer in numpy
+	cta = (c_float * 4 * ptCount).from_address(int(ptr))
+	out = np.ctypeslib.as_array(cta)
+
+	# Copy the input values into the pointer
+	out[:, :3] = newVerts
+
+	# Set the vert positions
+	fnMesh.setPoints(om.MFloatPointArray(ptr, ptCount))
+
+def rootWindow():
+	"""
+	Returns the currently active QT main window
+	Only works for QT UI's like Maya
+	"""
+	from MeshCrawler.Qt.QtWidgets import QApplication, QSplashScreen, QDialog, QMainWindow
+	# for MFC apps there should be no root window
+	window = None
+	if QApplication.instance():
+		inst = QApplication.instance()
+		window = inst.activeWindow()
+		# Ignore QSplashScreen's, they should never be considered the root window.
+		if isinstance(window, QSplashScreen):
+			return None
+		# If the application does not have focus try to find A top level widget
+		# that doesn't have a parent and is a QMainWindow or QDialog
+		if window is None:
+			windows = []
+			dialogs = []
+			for w in QApplication.instance().topLevelWidgets():
+				if w.parent() is None:
+					if isinstance(w, QMainWindow):
+						windows.append(w)
+					elif isinstance(w, QDialog):
+						dialogs.append(w)
+			if windows:
+				window = windows[0]
+			elif dialogs:
+				window = dialogs[0]
+
+		# grab the root window
+		if window:
+			while True:
+				parent = window.parent()
+				if not parent:
+					break
+				if isinstance(parent, QSplashScreen):
+					break
+				window = parent
+
+	return window
 

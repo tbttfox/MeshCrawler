@@ -1,21 +1,38 @@
-import blurdev
-from blurdev.gui import Dialog, loadUi
-from Qt.QtCore import Qt
-from Qt.QtWidgets import QApplication, QProgressDialog, QMessageBox, QFileDialog, QTableWidgetSelectionRange, QTableWidgetItem
+#import blurdev
+#from blurdev.gui import Dialog, loadUi
+import os
+from MeshCrawler.Qt import QtCompat
+from MeshCrawler.Qt.QtCore import Qt
+from MeshCrawler.Qt.QtWidgets import (QApplication, QProgressDialog, QMessageBox, QFileDialog,
+						  QTableWidgetSelectionRange, QTableWidgetItem, QDialog)
 
-from meshcrawlerErrors import TopologyMismatch, IslandMismatch
-from meshcrawlerLib import matchByTopology
-from meshcrawlerGen import matchGenerator, autoCrawlMeshes, partitionIslands, starMatchGenerator
-from selectVerts import selectVert, getVert
+from MeshCrawler.meshcrawlerErrors import TopologyMismatch, IslandMismatch
+from MeshCrawler.meshcrawlerLib import matchByTopology
+from MeshCrawler.meshcrawlerGen import matchGenerator, autoCrawlMeshes, partitionIslands, starMatchGenerator
+#from MeshCrawler.selectVerts import selectVert, getVert
+from MeshCrawler.commands import (getVerts, selectVerts, getSingleSelection, getObjectName,
+	getObjectByName, cloneObject, freezeObject, setObjectName, setAllVerts)
+from MeshCrawler.mesh import Mesh
 
-from blur3d.api import Scene, Collection
-from blur3d.api.classes.mesh import Mesh
+#from blur3d.api import Scene, Collection
+#from blur3d.api.classes.mesh import Mesh
 import numpy as np
 
-class MeshCrawlerDialog(Dialog):
+def getUiFile(fileVar, subFolder="ui", uiName=None):
+	"""Get the path to the .ui file"""
+	uiFolder, filename = os.path.split(fileVar)
+	if uiName is None:
+		uiName = os.path.splitext(filename)[0]
+	if subFolder:
+		uiFile = os.path.join(uiFolder, subFolder, uiName+".ui")
+	return uiFile
+
+class MeshCrawlerDialog(QDialog):
 	def __init__(self, parent=None):
 		super(MeshCrawlerDialog, self).__init__(parent)
-		loadUi(__file__, self)
+
+		uiPath = getUiFile(__file__)
+		QtCompat.loadUi(uiPath, self)
 
 		self.lastMatch = None
 		self.uiExportBTN.hide()
@@ -65,20 +82,19 @@ class MeshCrawlerDialog(Dialog):
 			self.resize(self.width(), self.minimumSize().height()*2)
 
 	def getOrder(self):
-		scene = Scene()
-		n = scene.selection()
-		if not n:
+		sel = getSingleSelection()
+		if not sel:
 			return
-		name = str(n[0].name())
+		name = getObjectName(sel)
 		self.uiOrderLINE.setText(name)
 		self._orderMesh = None
 
 	def getShape(self):
-		scene = Scene()
-		n = scene.selection()
-		if not n:
+
+		sel = getSingleSelection()
+		if not sel:
 			return
-		name = str(n[0].name())
+		name = getObjectName(sel)
 		self.uiShapeLINE.setText(name)
 		self._shapeMesh = None
 
@@ -139,21 +155,19 @@ class MeshCrawlerDialog(Dialog):
 
 	def _orderObject(self):
 		name = self.uiOrderLINE.text()
-		scene = Scene()
-		return scene.findObject(name)
+		return getObjectByName(name)
 
 	def _shapeObject(self):
 		name = self.uiShapeLINE.text()
-		scene = Scene()
-		return scene.findObject(name)
+		return getObjectByName(name)
 
 	def getVert(self):
 		col = self.uiPairTABLE.currentColumn()
 		thing = self._orderObject() if col == 0 else self._shapeObject()
 		item = self.uiPairTABLE.currentItem()
 
-		if getVert is not None:
-			val = getVert(thing)
+		if getVerts is not None:
+			val = getVerts(thing)
 			if val is not None:
 				item.setData(Qt.EditRole, val)
 
@@ -266,8 +280,8 @@ class MeshCrawlerDialog(Dialog):
 				data = None
 
 			obj = self._orderObject() if col == 0 else self._shapeObject()
-			if selectVert is not None:
-				selectVert(obj, data)
+			if selectVerts is not None:
+				selectVerts(obj, data)
 
 	def _crawlAdvanced(self, pairs, orderMesh, shapeMesh, pBar):
 		ois = [frozenset(i) for i in partitionIslands(orderMesh)]
@@ -323,8 +337,6 @@ class MeshCrawlerDialog(Dialog):
 		return matches
 
 	def crawl(self):
-		scene = Scene()
-
 		pairs = None
 		if self.uiAdvancedGRP.isChecked():
 			try:
@@ -379,29 +391,22 @@ class MeshCrawlerDialog(Dialog):
 		allMatch = sorted(allMatch)
 
 		orderObj = self._orderObject()
-		shapeObj = self._shapeObject()
-		orderPrim = orderObj.activePrimitive()
-		shapePrim = shapeObj.activePrimitive()
+		shapeVerts = getVerts(self._shapeObject())
+		orderVerts = getVerts(self._orderObject())
 
-		fixitObjects = scene.cloneObjects([orderObj])
-		fixitObject = fixitObjects[0]
-		fixitObject.deleteHistory()
+		fixitObject = cloneObject(orderObj)
+		freezeObject(fixitObject)
 
 		nn = str(self.uiOutputLINE.text())
 		if nn:
-			fixitObject.setDisplayName(nn)
+			setObjectName(fixitObject, nn)
 
 		self.lastMatch = np.array(allMatch)
-		fixPrim = fixitObject.activePrimitive()
 
-		sverts = shapePrim.vertexPositions()
-		overts = orderPrim.vertexPositions()
 		for oIdx, sIdx in allMatch:
-			overts[oIdx] = sverts[sIdx]
-
-		fixPrim.setVertexPositions(overts)
+			orderVerts[oIdx] = shapeVerts[sIdx]
+		setAllVerts(fixitObject, orderVerts)
 
 		self.uiExportBTN.show()
-
 		pBar.close()
 

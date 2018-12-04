@@ -33,3 +33,6 @@ def getVertSelection(obj):
 	# Does nothing
 	return None
 
+def rootWindow():
+	return None
+

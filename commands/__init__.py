@@ -1,15 +1,15 @@
 try:
-	from .maxCommands import (getSingleSelection, getObjectByName, getObjectName,
+	from .maxCommands import (getSingleSelection, getObjectByName, getObjectName, rootWindow,
 						  getFaces, getVerts, createRawObject, selectVerts, getVertSelection)
 except ImportError:
 	try:
-		from .mayaCommands import (getSingleSelection, getObjectByName, getObjectName,
+		from .mayaCommands import (getSingleSelection, getObjectByName, getObjectName, rootWindow,
 						  getFaces, getVerts, createRawObject, selectVerts, getVertSelection)
 	except ImportError:
 		try:
-			from .xsiCommands import (getSingleSelection, getObjectByName, getObjectName,
+			from .xsiCommands import (getSingleSelection, getObjectByName, getObjectName, rootWindow,
 						  getFaces, getVerts, createRawObject, selectVerts, getVertSelection)
 		except ImportError:
-			from .externalCommands import (getSingleSelection, getObjectByName, getObjectName,
+			from .externalCommands import (getSingleSelection, getObjectByName, getObjectName, rootWindow,
 						  getFaces, getVerts, createRawObject, selectVerts, getVertSelection)
 
