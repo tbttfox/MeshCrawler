@@ -4,14 +4,15 @@ import os
 from MeshCrawler.Qt import QtCompat
 from MeshCrawler.Qt.QtCore import Qt
 from MeshCrawler.Qt.QtWidgets import (QApplication, QProgressDialog, QMessageBox, QFileDialog,
-						  QTableWidgetSelectionRange, QTableWidgetItem, QDialog)
+						  QTableWidgetSelectionRange, QTableWidgetItem, QDialog, QWidget)
 
 from MeshCrawler.meshcrawlerErrors import TopologyMismatch, IslandMismatch
 from MeshCrawler.meshcrawlerLib import matchByTopology
 from MeshCrawler.meshcrawlerGen import matchGenerator, autoCrawlMeshes, partitionIslands, starMatchGenerator
 #from MeshCrawler.selectVerts import selectVert, getVert
-from MeshCrawler.commands import (getVerts, selectVerts, getSingleSelection, getObjectName,
+from MeshCrawler.commands import (getVerts, getFaces, getUVs, selectVerts, getSingleSelection, getObjectName,
 	getObjectByName, cloneObject, freezeObject, setObjectName, setAllVerts)
+
 from MeshCrawler.mesh import Mesh
 
 #from blur3d.api import Scene, Collection
@@ -27,11 +28,12 @@ def getUiFile(fileVar, subFolder="ui", uiName=None):
 		uiFile = os.path.join(uiFolder, subFolder, uiName+".ui")
 	return uiFile
 
-class MeshCrawlerDialog(QDialog):
-	def __init__(self, parent=None):
-		super(MeshCrawlerDialog, self).__init__(parent)
 
-		uiPath = getUiFile(__file__)
+
+class MatchTopologyWidget(QWidget):
+	def __init__(self, parent=None):
+		super(MatchTopologyWidget, self).__init__(parent)
+		uiPath = getUiFile(__file__, uiName='MatchTopologyWidget')
 		QtCompat.loadUi(uiPath, self)
 
 		self.lastMatch = None
@@ -63,7 +65,6 @@ class MeshCrawlerDialog(QDialog):
 		#self.uiOrderLINE.setText('Order')
 		#self.uiShapeLINE.setText('Shape')
 		#self.uiOutputLINE.setText('asdf')
-		self.setMinimumSize(200, 155)
 
 		self._orderMesh = None
 		self._shapeMesh = None
@@ -73,13 +74,10 @@ class MeshCrawlerDialog(QDialog):
 		if not shown:
 			self.uiAdvancedGRP.setFlat(True)
 			self.uiAdvancedGRP.setMaximumHeight(15)
-			self.setMinimumHeight(155)
-			self.resize(self.width(), self.minimumSize().height())
+
 		else:
 			self.uiAdvancedGRP.setFlat(False)
 			self.uiAdvancedGRP.setMaximumHeight(self._maxHeight)
-			self.setMinimumHeight(180)
-			self.resize(self.width(), self.minimumSize().height()*2)
 
 	def getOrder(self):
 		sel = getSingleSelection()
@@ -90,7 +88,6 @@ class MeshCrawlerDialog(QDialog):
 		self._orderMesh = None
 
 	def getShape(self):
-
 		sel = getSingleSelection()
 		if not sel:
 			return
@@ -178,17 +175,21 @@ class MeshCrawlerDialog(QDialog):
 			QMessageBox.warning(self, "Get objects", "Must have order and shape loaded")
 
 		if self._orderMesh is None:
-			orderPrim = oo.activePrimitive()
+			orderVerts = getVerts(oo)
+			orderFaces = getFaces(oo)
+			orderUVs, orderUVFaces = getUVs(oo)
 			pBar.setLabelText("Loading Order")
 			QApplication.processEvents()
-			self._orderMesh = Mesh(orderPrim.vertexPositions(), orderPrim.faces())
+			self._orderMesh = Mesh(orderVerts, orderFaces, uvs=orderUVs, uvFaces=orderUVFaces)
 			pBar.setValue(pBar.value() + step)
 
 		if self._shapeMesh is None:
-			shapePrim = so.activePrimitive()
+			shapeVerts = getVerts(so)
+			shapeFaces = getFaces(so)
+			shapeUVs, shapeUVFaces = getUVs(so)
 			pBar.setLabelText("Loading Shape")
 			QApplication.processEvents()
-			self._shapeMesh = Mesh(shapePrim.vertexPositions(), shapePrim.faces())
+			self._shapeMesh = Mesh(shapeVerts, shapeFaces, uvs=shapeUVs, uvFaces=shapeUVFaces)
 			pBar.setValue(pBar.value() + step)
 
 	def guess(self):
@@ -394,12 +395,9 @@ class MeshCrawlerDialog(QDialog):
 		shapeVerts = getVerts(self._shapeObject())
 		orderVerts = getVerts(self._orderObject())
 
-		fixitObject = cloneObject(orderObj)
-		freezeObject(fixitObject)
-
 		nn = str(self.uiOutputLINE.text())
-		if nn:
-			setObjectName(fixitObject, nn)
+		fixitObject = cloneObject(orderObj, nn)
+		freezeObject(fixitObject)
 
 		self.lastMatch = np.array(allMatch)
 
@@ -409,4 +407,33 @@ class MeshCrawlerDialog(QDialog):
 
 		self.uiExportBTN.show()
 		pBar.close()
+
+
+
+
+class UnSubdivideWidget(QWidget):
+	def __init__(self, parent=None):
+		super(UnSubdivideWidget, self).__init__(parent)
+		uiPath = getUiFile(__file__, uiName='UnSubdivideWidget')
+		QtCompat.loadUi(uiPath, self)
+
+
+
+
+
+
+class MeshCrawlerDialog(QDialog):
+	def __init__(self, parent=None):
+		super(MeshCrawlerDialog, self).__init__(parent)
+		uiPath = getUiFile(__file__)
+		QtCompat.loadUi(uiPath, self)
+
+		self.uiTopologyWID = MatchTopologyWidget(self.uiTopologyParWID)
+		topoLay = self.uiTopologyParWID.layout()
+		topoLay.addWidget(self.uiTopologyWID)
+
+		self.uiUnSubWID = UnSubdivideWidget(self.uiUnSubParWID)
+		subLay = self.uiUnSubParWID.layout()
+		subLay.addWidget(self.uiUnSubWID)
+
 
