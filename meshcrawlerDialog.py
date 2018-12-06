@@ -1,6 +1,6 @@
 #import blurdev
 #from blurdev.gui import Dialog, loadUi
-import os
+import os, json
 from MeshCrawler.Qt import QtCompat
 from MeshCrawler.Qt.QtCore import Qt
 from MeshCrawler.Qt.QtWidgets import (QApplication, QProgressDialog, QMessageBox, QFileDialog,
@@ -100,7 +100,7 @@ class MatchTopologyWidget(QWidget):
 		d.exec_()
 		if d.result():
 			path = d.selectedFiles()[0]
-			with open(path, 'r') as f:
+			with open(path, 'w') as f:
 				json.dump(self.lastMatch, f)
 
 	def addPair(self):
