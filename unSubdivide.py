@@ -609,7 +609,25 @@ def collapse(faces, verts, uvFaces, uvs):
 
 	return nFaces, nVerts, nUVFaces, nUVs
 
-def unsubdivide(faces, verts, uvFaces, uvs, hints=None, repositionVerts=True, pinBorders=False):
+def getCenters(faces, hints=None):
+	"""
+	Given a set of faces, find the face-center vertices from the subdivision
+	Arguments:
+		faces ([[vIdx ...], ...]): The subdivided face structure
+		hints (None/list/set): An list or set containing vertex indices that
+			were part of the original un-subdivided mesh.
+			If not provided, it will auto-detect based on topology relative to the border
+			If there are no borders, it will pick an arbitrary (but not random) star point
+	"""
+	eNeigh = buildEdgeDict(faces)
+	if hints is None:
+		borders = getBorders(faces)
+		hints = buildUnsubdivideHints(faces, eNeigh, borders)
+	centerDel, fail = getFaceCenterDel(faces, eNeigh, hints)
+	assert not fail, "Could not detect subdivided topology with the provided hints"
+	return centerDel
+
+def unSubdivide(faces, verts, uvFaces, uvs, hints=None, repositionVerts=True, pinBorders=False):
 	"""
 	Given a mesh representation (faces and vertices) remove the edges added
 	by a subdivision, and optionally reposition the verts

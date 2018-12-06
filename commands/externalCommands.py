@@ -33,6 +33,9 @@ def getVertSelection(obj):
 	# Does nothing
 	return None
 
+def selectAdjacentEdges(obj, centers):
+	pass
+
 def rootWindow():
 	return None
 

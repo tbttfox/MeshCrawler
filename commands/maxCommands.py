@@ -145,6 +145,9 @@ def setAllVerts(obj, newVerts):
 			mxs.setVert(obj, i + 1, *v)
 	return True
 
+def selectAdjacentEdges(obj, centers):
+	pass
+
 def rootWindow():
 	"""
 	Returns the currently active QT main window

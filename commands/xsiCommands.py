@@ -146,6 +146,9 @@ def setAllVerts(obj, newVerts):
 	verts = newVerts.T.tolist()
 	obj.ActivePrimitive.Geometry.Points.PositionArray = verts
 
+def selectAdjacentEdges(obj, centers):
+	pass
+
 def rootWindow():
 	"""
 	Returns the currently active QT main window

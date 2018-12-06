@@ -175,6 +175,9 @@ def setAllVerts(obj, newVerts):
 	# Set the vert positions
 	fnMesh.setPoints(om.MFloatPointArray(ptr, ptCount))
 
+def selectAdjacentEdges(obj, centers):
+	pass
+
 def rootWindow():
 	"""
 	Returns the currently active QT main window

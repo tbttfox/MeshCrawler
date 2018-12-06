@@ -9,15 +9,13 @@ from MeshCrawler.Qt.QtWidgets import (QApplication, QProgressDialog, QMessageBox
 from MeshCrawler.meshcrawlerErrors import TopologyMismatch, IslandMismatch
 from MeshCrawler.meshcrawlerLib import matchByTopology
 from MeshCrawler.meshcrawlerGen import matchGenerator, autoCrawlMeshes, partitionIslands, starMatchGenerator
-#from MeshCrawler.selectVerts import selectVert, getVert
+
 from MeshCrawler.commands import (getVerts, getFaces, getUVs, selectVerts, getSingleSelection, getObjectName,
-	getObjectByName, cloneObject, freezeObject, setObjectName, setAllVerts)
+	getObjectByName, cloneObject, freezeObject, setObjectName, setAllVerts, getVertSelection, createRawObject,
+	selectAdjacentEdges)
 
 from MeshCrawler.mesh import Mesh
-
-#from blur3d.api import Scene, Collection
-#from blur3d.api.classes.mesh import Mesh
-import numpy as np
+from MeshCrawler.unSubdivide import unSubdivide, getCenters
 
 def getUiFile(fileVar, subFolder="ui", uiName=None):
 	"""Get the path to the .ui file"""
@@ -27,8 +25,6 @@ def getUiFile(fileVar, subFolder="ui", uiName=None):
 	if subFolder:
 		uiFile = os.path.join(uiFolder, subFolder, uiName+".ui")
 	return uiFile
-
-
 
 class MatchTopologyWidget(QWidget):
 	def __init__(self, parent=None):
@@ -98,13 +94,14 @@ class MatchTopologyWidget(QWidget):
 	def exportLast(self):
 		if self.lastMatch is None:
 			return
-		d = QFileDialog(self, "Save Last Selection", "", "Numpy (*.np);;All Files (*.*)")
+		d = QFileDialog(self, "Save Last Selection", "", "JSON (*.json);;All Files (*.*)")
 		d.setAcceptMode(QFileDialog.AcceptSave)
-		d.setDefaultSuffix('np')
+		d.setDefaultSuffix('json')
 		d.exec_()
 		if d.result():
 			path = d.selectedFiles()[0]
-			self.lastMatch.dump(path)
+			with open(path, 'r') as f:
+				json.dump(self.lastMatch, f)
 
 	def addPair(self):
 		rc = self.uiPairTABLE.rowCount()
@@ -399,7 +396,7 @@ class MatchTopologyWidget(QWidget):
 		fixitObject = cloneObject(orderObj, nn)
 		freezeObject(fixitObject)
 
-		self.lastMatch = np.array(allMatch)
+		self.lastMatch = allMatch
 
 		for oIdx, sIdx in allMatch:
 			orderVerts[oIdx] = shapeVerts[sIdx]
@@ -409,17 +406,63 @@ class MatchTopologyWidget(QWidget):
 		pBar.close()
 
 
-
-
 class UnSubdivideWidget(QWidget):
 	def __init__(self, parent=None):
 		super(UnSubdivideWidget, self).__init__(parent)
 		uiPath = getUiFile(__file__, uiName='UnSubdivideWidget')
 		QtCompat.loadUi(uiPath, self)
 
+		self.uiGetUnsubObjBTN.clicked.connect(self.getObjectFromSelection)
+		self.uiGetHintsBTN.clicked.connect(self.getVertsFromSelection)
+		self.uiUnSubdivideBTN.clicked.connect(self.doUnsub)
 
+	def getObjectFromSelection(self):
+		obj = getSingleSelection()
+		if not obj:
+			return
+		objName = getObjectName(obj)
+		self.uiUnsubObjLINE.setText(objName)
 
+	def getVertsFromSelection(self):
+		sel = getVertSelection()
+		val = ','.join(map(str(sel))) if sel else ''
+		self.uiManualHintsLINE.setText(val)
 
+	def _getObject(self):
+		objName = str(self.uiUnsubObjLINE.text())
+		if not objName:
+			return None
+		return getObjectByName(objName)
+
+	def _getHints(self):
+		hints = str(self.uiManualHintsLINE.text())
+		if not hints:
+			return None
+		hints = hints.strip().split(',')
+		hints = map(int, hints)
+		return hints
+
+	def doUnsub(self):
+		obj = self._getObject()
+		if obj is None:
+			return
+
+		hints = self._getHints()
+		verts = getVerts(obj)
+		faces = getFaces(obj)
+		uvs, uvFaces = getUVs(obj)
+
+		if self.uiSelectEdgesRDO.isChecked():
+			centers = getCenters(faces)
+			selectAdjacentEdges(obj, centers)
+		else:
+			newName = getObjectName(obj)
+			newName = newName + "_UNSUB"
+			repositionVerts = self.uiUpdatePositionsRDO.isChecked()
+			pinBorders = self.uiPinBordersCHK.isChecked()
+			rFaces, rVerts, rUVFaces, rUVs = unSubdivide(faces, verts, uvFaces, uvs,
+				hints=hints, repositionVerts=repositionVerts, pinBorders=pinBorders)
+			createRawObject(newName, rFaces, rVerts, rUVFaces, rUVs)
 
 
 class MeshCrawlerDialog(QDialog):
@@ -435,5 +478,4 @@ class MeshCrawlerDialog(QDialog):
 		self.uiUnSubWID = UnSubdivideWidget(self.uiUnSubParWID)
 		subLay = self.uiUnSubParWID.layout()
 		subLay.addWidget(self.uiUnSubWID)
-
 

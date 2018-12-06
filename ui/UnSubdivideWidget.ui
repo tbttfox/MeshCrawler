@@ -97,7 +97,7 @@
       </widget>
      </item>
      <item>
-      <widget class="QPushButton" name="uiGetHintsLINE">
+      <widget class="QPushButton" name="uiGetHintsBTN">
        <property name="toolTip">
         <string>Load the selected mesh with the proper vertex order</string>
        </property>
