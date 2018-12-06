@@ -67,21 +67,20 @@ def getUVs(thing):
 	uArray = om.MFloatArray()
 	vArray = om.MFloatArray()
 	meshFn.getUVs(uArray, vArray)
-	hasUvs = uArray.length() > 0
+	hasUVs = uArray.length() > 0
+	if not hasUVs:
+		return None, None
 
 	uvFaces = []
 	for i in range(meshFn.numPolygons()):
 		meshFn.getPolygonVertices(i, vIdx)
-		face = []
 		uvFace = []
 		for j in reversed(xrange(vIdx.length())):
-			face.append(vIdx[j])
-			if hasUvs:
-				meshFn.getPolygonUVid(i, j, uvIdxPtr)
-				uvIdx = util.getInt(uvIdxPtr)
-				if uvIdx >= uArray.length() or uvIdx < 0:
-					uvIdx = 0
-				uvFace.append(uvIdx)
+			meshFn.getPolygonUVid(i, j, uvIdxPtr)
+			uvIdx = util.getInt(uvIdxPtr)
+			if uvIdx >= uArray.length() or uvIdx < 0:
+				uvIdx = 0
+			uvFace.append(uvIdx)
 		uvFaces.append(uvFace)
 
 	uvs = [(uArray[i], vArray[i]) for i in xrange(uArray.length())]
@@ -105,7 +104,7 @@ def createRawObject(name, faces, verts, uvFaces, uvs):
 	vertArray = om.MFloatPointArray()
 	vertArray.setLength(len(verts))
 	for i, v in enumerate(verts):
-		vertArray.set(i, v[0], v[1], v[2])
+		vertArray.set(i, float(v[0]), float(v[1]), float(v[2]))
 
 	fnMesh.createInPlace(len(verts), len(faces), vertArray, counts, connects)
 	fnMesh.updateSurface()
@@ -136,13 +135,14 @@ def selectVerts(obj, idx):
 		cmds.select('pSphere1.vtx[{0}]'.format(idx), replace=True)
 
 def getVertSelection(obj):
-	sel = cmds.ls(selection=True)
+	sel = cmds.ls(selection=True, long=True)
 	sel = [i for i in sel if '.vtx' in i]
-	longs = cmds.ls(sel, long=True)
-	for s in longs:
-		if s.startswith(obj):
-			return int(s.split('[')[:-1])
-	return None
+	longName = cmds.ls(obj, long=True)[0]
+	nums = []
+	for s in sel:
+		if s.startswith(longName):
+			nums.append(int(s.split('[')[-1][:-1]))
+	return nums
 
 def cloneObject(obj, name):
 	return cmds.duplicate(obj, name=name)[0]

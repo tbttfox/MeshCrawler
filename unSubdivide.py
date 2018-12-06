@@ -6,7 +6,7 @@ original as closely as possible
 """
 import numpy as np
 from itertools import chain, izip_longest
-from Qt.QtWidgets import QApplication
+from MeshCrawler.Qt.QtWidgets import QApplication
 
 def mergeCycles(groups):
 	"""
@@ -112,17 +112,25 @@ def partitionIslands(faces, neigh, pBar=None):
 		allVerts.difference_update(exclude)
 
 		if pBar is not None:
-			pBar.set("Detecting Islands", (count - len(allVerts)) / count)
+			pBar.setValue(100 * (count - len(allVerts)) / count)
+			QApplication.processEvents()
 
 	return islands
 
 def buildUnsubdivideHints(faces, neigh, borders, pBar=None):
 	""" Get one vertex per island that was part of the original mesh """
-	islands = partitionIslands(faces, neigh)
+	islands = partitionIslands(faces, neigh, pBar=pBar)
 	hints = []
+
+	if pBar is not None:
+		pBar.setValue(0)
+		pBar.setMaximum(len(islands))
+		QApplication.processEvents()
+
 	for i, isle in enumerate(islands):
 		if pBar is not None:
-			pBar.set("Gathering Island Hints", i/float(len(islands)))
+			pBar.setValue(i)
+			QApplication.processEvents()
 		hints.append(buildHint(isle, neigh, borders))
 
 	hints = [h for h in hints if h is not None]
@@ -147,6 +155,11 @@ def getFaceCenterDel(faces, eNeigh, hints, pBar=None):
 	originals = set(hints)
 	queue = set(hints)
 
+	if pBar is not None:
+		pBar.setValue(0)
+		pBar.setMaximum(count)
+		QApplication.processEvents()
+
 	i = 0
 	fail = False
 	while queue:
@@ -155,7 +168,8 @@ def getFaceCenterDel(faces, eNeigh, hints, pBar=None):
 			continue
 
 		if pBar is not None:
-			pBar.set("Partitioning Vertices", i/count)
+			pBar.setValue(i)
+			QApplication.processEvents()
 			i += 2 # Add 2 because I *shouldn't* get any midpoints
 
 		midpoints.update(eNeigh[cur])
@@ -278,8 +292,7 @@ def buildLayeredNeighborDicts(faces, uFaces, dWings):
 	uNeighDict, uBorders = buildNeighborDict(uFaces)
 
 	assert borders >= uBorders, "Somehow the unsubdivided borders contain different vIdxs"
-
-	for k, uNeigh in uNeighDict.iteritems():
+	for i, (k, uNeigh) in enumerate(uNeighDict.iteritems()):
 		neighDict[k] = _align(neighDict[k], uNeigh, dWings)
 
 	return neighDict, uNeighDict, borders
@@ -362,26 +375,29 @@ def _findOldPosition3Valence(faces, uFaces, verts, uVerts, neighDict, uNeighDict
 
 	intr = computed.intersection(ueNeigh)
 	if intr:
-		# Easy valence 3 case. I only need
-		# The computed new neighbor
-		# The midpoint on the edge to that neighbor
-		# The "face" verts neighboring the midpoint
+		try:
+			# Easy valence 3 case. I only need
+			# The computed new neighbor
+			# The midpoint on the edge to that neighbor
+			# The "face" verts neighboring the midpoint
 
-		# Get the matching subbed an unsubbed neighbor indexes
-		uNIdx = intr.pop()
-		nIdx = eNeigh[ueNeigh.index(uNIdx)]
+			# Get the matching subbed an unsubbed neighbor indexes
+			uNIdx = intr.pop()
+			nIdx = eNeigh[ueNeigh.index(uNIdx)]
 
-		# Get the "face" verts next to the subbed neighbor
-		xx = neigh.index(nIdx)
-		fnIdxs = (neigh[xx-1], neigh[(xx+1)%len(neigh)])
+			# Get the "face" verts next to the subbed neighbor
+			xx = neigh.index(nIdx)
+			fnIdxs = (neigh[xx-1], neigh[(xx+1)%len(neigh)])
 
-		# Then compute
-		#vk = 4*k1e - ke - k1fNs[0] - k1fNs[1]
-		vka = uVerts[uNIdx] + verts[fnIdxs[0]] + verts[fnIdxs[1]]
-		vkb = verts[nIdx] * 4
-		uVerts[vIdx] = vkb - vka
-		computed.add(vIdx)
-		return True
+			# Then compute
+			#vk = 4*k1e - ke - k1fNs[0] - k1fNs[1]
+			vka = uVerts[uNIdx] + verts[fnIdxs[0]] + verts[fnIdxs[1]]
+			vkb = verts[nIdx] * 4
+			uVerts[vIdx] = vkb - vka
+			computed.add(vIdx)
+			return True
+		except:
+			return False
 	else:
 		# The Hard valence 3 case. Made even harder
 		# because the paper has a mistake in it
@@ -432,20 +448,18 @@ def _findOldPosition3Valence(faces, uFaces, verts, uVerts, neighDict, uNeighDict
 		return True
 	return False
 
-def deleteCenters(meshFaces, uvFaces, centerDel):
+def deleteCenters(meshFaces, uvFaces, centerDel, pBar=None):
 	"""
 	Delete the given vertices and connected edges from a face representation
-	to give a new representation. Also, while we're in the nitty gritty, make
-	some connections to keep track of 'ancestors' and 'children'
+	to give a new representation.
 
 	Arguments:
 		meshFaces ([[vIdx, ...], ...]): Starting mesh representation
 		centerDel ([vIdx, ...]): The vert indices to delete.
 
 	Returns:
-		[[vIdx, ...], ...]: A new mesh with unsubdivided topology
-		{vIdx: [vIdx, ...], ...}: A dict mapping deleted edge vertices
-			to their neighboring kept vertices
+		TODO
+
 	"""
 	# For each deleted index, grab the neighboring faces,
 	# and twist the faces so the deleted index is first
@@ -453,7 +467,6 @@ def deleteCenters(meshFaces, uvFaces, centerDel):
 	faceDelDict = {}
 	uvDelDict = {}
 	uvFaces = uvFaces or []
-
 	for face, uvFace in izip_longest(meshFaces, uvFaces):
 		fi = cds.intersection(face)
 		# If we are a subdivided mesh, Then each face will have exactly one
@@ -476,11 +489,22 @@ def deleteCenters(meshFaces, uvFaces, centerDel):
 	nUVFaces = []
 	wings = {}
 	uvWings = {}
+
+	if pBar is not None:
+		pBar.setValue(0)
+		pBar.setMaximum(len(faceDelDict))
+
+	chk = -1
 	for idx, rFaces in faceDelDict.iteritems():
-		uvFaces = uvDelDict.get(idx, [])
+		chk += 1
+		if pBar is not None:
+			pBar.setValue(chk)
+			QApplication.processEvents()
+
+		ruvFaces = uvDelDict.get(idx, [])
 		# The faces are guaranteed to be in a single loop cycle
 		# so I don't have to handle any annoying edge cases! Yay!
-		faceEnds = {f[1]: (f[2], f[3], uvf) for f, uvf in izip_longest(rFaces, uvFaces)} #face ends
+		faceEnds = {f[1]: (f[2], f[3], uvf) for f, uvf in izip_longest(rFaces, ruvFaces)} #face ends
 
 		end = rFaces[-1][-1] # get an arbitrary face to start with
 		newFace = []
@@ -493,9 +517,13 @@ def deleteCenters(meshFaces, uvFaces, centerDel):
 				print "fe", faceEnds
 				raise
 			if uvf is not None:
-				nUVFace.append(uvf[2])
-				uvWings.setdefault(uvf[1], []).append(uvf[2])
-				uvWings.setdefault(uvf[3], []).append(uvf[2])
+				try:
+					nUVFace.append(uvf[2])
+					uvWings.setdefault(uvf[1], []).append(uvf[2])
+					uvWings.setdefault(uvf[3], []).append(uvf[2])
+				except IndexError:
+					print "UVF", uvf, chk
+					raise
 
 			newFace.append(diag)
 			wings.setdefault(end, []).append(diag)
@@ -533,11 +561,14 @@ def fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned, pBar=
 	bowTieIdxs = []
 	computed = set()
 	i = 0
-	count = float(len(verts))
+	if pBar is not None:
+		pBar.setValue(0)
+		pBar.setMaximum(len(uIdxs))
 
 	for idx in uIdxs:
 		if pBar is not None:
-			pBar.set("Solving positions", i/count)
+			pBar.setValue(i)
+			QApplication.processEvents()
 		if len(uNeighDict[idx]) > 1:
 			bowTieIdxs.append(idx)
 			i += 1
@@ -546,7 +577,7 @@ def fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned, pBar=
 		elif idx in borders:
 			_findOldPositionBorder(faces, uFaces, verts, uVerts, neighDict, uNeighDict, borders, idx, computed)
 			i += 1
-		elif sum(map(len, uNeighDict[idx])) > 6: # if valence > 3
+		elif sum(map(len, neighDict[idx])) > 6: # if valence > 3
 			_findOldPositionSimple(faces, uFaces, verts, uVerts, neighDict, uNeighDict, idx, computed)
 			i += 1
 		else:
@@ -561,7 +592,8 @@ def fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned, pBar=
 			if not up:
 				continue
 			if pBar is not None:
-				pBar.set("Solving positions", i/count)
+				pBar.setValue(i)
+				QApplication.processEvents()
 			i += 1
 			updated = True
 			rem.add(idx)
@@ -609,7 +641,7 @@ def collapse(faces, verts, uvFaces, uvs):
 
 	return nFaces, nVerts, nUVFaces, nUVs
 
-def getCenters(faces, hints=None):
+def getCenters(faces, hints=None, pBar=None):
 	"""
 	Given a set of faces, find the face-center vertices from the subdivision
 	Arguments:
@@ -619,15 +651,24 @@ def getCenters(faces, hints=None):
 			If not provided, it will auto-detect based on topology relative to the border
 			If there are no borders, it will pick an arbitrary (but not random) star point
 	"""
+	if pBar is not None:
+		pBar.setLabelText("Crawling Edges")
+		pBar.show()
+		QApplication.processEvents()
+
 	eNeigh = buildEdgeDict(faces)
 	if hints is None:
 		borders = getBorders(faces)
-		hints = buildUnsubdivideHints(faces, eNeigh, borders)
-	centerDel, fail = getFaceCenterDel(faces, eNeigh, hints)
+		hints = buildUnsubdivideHints(faces, eNeigh, borders, pBar=None) # purposely no PBar
+	centerDel, fail = getFaceCenterDel(faces, eNeigh, hints, pBar=pBar)
 	assert not fail, "Could not detect subdivided topology with the provided hints"
+
+	if pBar is not None:
+		pBar.close()
+
 	return centerDel
 
-def unSubdivide(faces, verts, uvFaces, uvs, hints=None, repositionVerts=True, pinBorders=False):
+def unSubdivide(faces, verts, uvFaces, uvs, hints=None, repositionVerts=True, pinBorders=False, pBar=None):
 	"""
 	Given a mesh representation (faces and vertices) remove the edges added
 	by a subdivision, and optionally reposition the verts
@@ -641,119 +682,61 @@ def unSubdivide(faces, verts, uvFaces, uvs, hints=None, repositionVerts=True, pi
 			If there are no borders, it will pick an arbitrary (but not random) star point
 		repositionVerts (bool): Whether or not to calculate the original vert positions
 	"""
+	if pBar is not None:
+		pBar.show()
+		pBar.setLabelText("Finding Neighbors")
+		QApplication.processEvents()
+
 	eNeigh = buildEdgeDict(faces)
+
+	if pBar is not None:
+		pBar.show()
+		pBar.setLabelText("Getting Hints")
+		QApplication.processEvents()
+
 	if hints is None:
 		borders = getBorders(faces)
-		hints = buildUnsubdivideHints(faces, eNeigh, borders)
-	centerDel, fail = getFaceCenterDel(faces, eNeigh, hints)
+		hints = buildUnsubdivideHints(faces, eNeigh, borders, pBar=None) # Purposely no PBar
+
+	if pBar is not None:
+		pBar.setLabelText("Crawling Edges")
+		QApplication.processEvents()
+	centerDel, fail = getFaceCenterDel(faces, eNeigh, hints, pBar=pBar)
 	assert not fail, "Could not detect subdivided topology with the provided hints"
 
-	uFaces, uUVFaces, dWings, uvDWings = deleteCenters(faces, uvFaces, centerDel)
+	if pBar is not None:
+		pBar.setLabelText("Deleting Edges")
+		QApplication.processEvents()
+	uFaces, uUVFaces, dWings, uvDWings = deleteCenters(faces, uvFaces, centerDel, pBar=pBar)
+
+	uVerts = verts
+	uUVs = uvs
 	if repositionVerts:
 		# Handle the verts
+		if pBar is not None:
+			pBar.setLabelText("Building Correspondences")
+			QApplication.processEvents()
 		neighDict, uNeighDict, borders = buildLayeredNeighborDicts(faces, uFaces, dWings)
 		pinned = set(borders) if pinBorders else []
-		uVerts = fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned)
+		if pBar is not None:
+			pBar.setLabelText("Fixing Vert Positions")
+			QApplication.processEvents()
+		uVerts = fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned, pBar=pBar)
 
 		# Handle the UVs
-		uvNeighDict, uUVNeighDict, uvBorders = buildLayeredNeighborDicts(uvFaces, uUVFaces, uvDWings)
-		uvPinned = getUVPins(faces, borders, uvFaces, uvBorders, pinBorders)
-		uUVs = fixVerts(uvFaces, uUVFaces, uvs, uvNeighDict, uUVNeighDict, uvBorders, uvPinned)
-	else:
-		uVerts = verts
-		uUVs = uvs
+		if uvFaces is not None:
+			uvNeighDict, uUVNeighDict, uvBorders = buildLayeredNeighborDicts(uvFaces, uUVFaces, uvDWings)
+			uvPinned = getUVPins(faces, borders, uvFaces, uvBorders, pinBorders)
+			if pBar is not None:
+				pBar.setLabelText("Fixing UV Positions")
+				QApplication.processEvents()
+			uUVs = fixVerts(uvFaces, uUVFaces, uvs, uvNeighDict, uUVNeighDict, uvBorders, uvPinned, pBar=pBar)
 
 	rFaces, rVerts, rUVFaces, rUVs = collapse(uFaces, uVerts, uUVFaces, uUVs)
+
+	if pBar is not None:
+		pBar.close()
+
 	return rFaces, rVerts, rUVFaces, rUVs
-
-def writeObj(faces, verts, uvFaces, uvs, path):
-	""" Write a .obj file """
-	import time
-	lines = []
-
-	lines.append('# obj export')
-	lines.append('# file created: {}'.format(time.strftime('%c')))
-
-	lines.append('')
-	lines.append('# begin {} vertices'.format(len(verts)))
-	for v in verts:
-		lines.append('v {0:.8f} {1:.8f} {2:.8f}'.format(*v))
-	lines.append('# end {} vertices'.format(len(verts)))
-
-	if uvs.size > 0:
-		lines.append('')
-		lines.append('# begin {} uvs'.format(len(uvs)))
-		for u in uvs:
-			lines.append('vt {0:.8f} {1:.8f}'.format(*u))
-		lines.append('# end {} uvs'.format(len(uvs)))
-
-	lines.append('')
-	lines.append('# begin {} faces'.format(len(faces)))
-	uvFaces = uvFaces or []
-	for f, uvf in izip_longest(faces, uvFaces):
-		if uvf is not None:
-			vnums = ' '.join(['{}/{}'.format(i+1, u+1) for i, u in zip(f, uvf)])
-		else:
-			vnums = ' '.join([str(i+1) for i in f])
-		lines.append('f ' + vnums)
-
-	lines.append('# end {} faces'.format(len(faces)))
-	out = '\n'.join(lines)
-	with open(path, 'w') as f:
-		f.write(out)
-
-def readObj(path):
-	""" Read a .obj file """
-	vertices = []
-	uvs = []
-	faces = []
-	uvFaces = []
-	with open(path, 'r') as inFile:
-		lines = inFile.readlines()
-
-	badUvs = False
-	for line in lines:
-		sp = line.split()
-		if sp == []:
-			pass
-		elif sp[0] == "v":
-			vertices.append([float(i) for i in sp[1:4]])
-		elif sp[0] == "vt":
-			uvs.append([float(i) for i in sp[1:3]])
-		elif sp[0] == "f":
-			face = []
-			for s in sp[1:]:
-				vt = [int(i)-1 if i else None for i in s.split('/')]
-				# Pad out the face vert/uv/normal triples
-				face.append(vt + [None]*3)
-			# Then cut them back to 3
-			fTrips = [i[:2] for i in face]
-			face, uvFace = zip(*fTrips)
-			faces.append(face)
-			uvFaces.append(uvFace)
-			if None in uvFace:
-				badUvs = True
-
-	if badUvs:
-		uvFaces = None
-		uvs = None
-	else:
-		uvs = np.array(uvs)
-
-	return faces, np.array(vertices), uvFaces, uvs
-
-def test():
-	""" Quick test """
-	inPath = r'D:\Users\tyler\Desktop\trueUnsub\Subd.obj'
-	outPath = r'D:\Users\tyler\Desktop\trueUnsub\UnSub.obj'
-	print "Reading"
-	faces, verts, uvFaces, uvs = readObj(inPath)
-	print "Unsubbing"
-	rFaces, rVerts, rUVFaces, rUVs = unsubdivide(faces, verts, uvFaces, uvs)
-	print "Writing"
-	writeObj(rFaces, rVerts, rUVFaces, rUVs, outPath)
-
-if __name__ == "__main__":
-	test()
 
 

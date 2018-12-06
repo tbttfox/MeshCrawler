@@ -424,8 +424,12 @@ class UnSubdivideWidget(QWidget):
 		self.uiUnsubObjLINE.setText(objName)
 
 	def getVertsFromSelection(self):
-		sel = getVertSelection()
-		val = ','.join(map(str(sel))) if sel else ''
+		obj = self._getObject()
+		if obj is None:
+			QMessageBox.warning(self, "Get objects", "Must have an object loaded first")
+			return
+		sel = getVertSelection(obj)
+		val = ','.join(map(str, sel)) if sel else ''
 		self.uiManualHintsLINE.setText(val)
 
 	def _getObject(self):
@@ -439,29 +443,35 @@ class UnSubdivideWidget(QWidget):
 		if not hints:
 			return None
 		hints = hints.strip().split(',')
-		hints = map(int, hints)
+		hints = [int(i.strip()) for i in hints]
 		return hints
 
 	def doUnsub(self):
 		obj = self._getObject()
 		if obj is None:
+			QMessageBox.warning(self, "Get objects", "Must have an object loaded first")
 			return
+		pBar = QProgressDialog(self)
+		pBar.setLabelText("Unsubdividing")
+		pBar.setValue(0)
+		pBar.setMaximum(100)
+
 
 		hints = self._getHints()
 		verts = getVerts(obj)
 		faces = getFaces(obj)
 		uvs, uvFaces = getUVs(obj)
-
 		if self.uiSelectEdgesRDO.isChecked():
-			centers = getCenters(faces)
+			centers = getCenters(faces, pBar=pBar)
 			selectAdjacentEdges(obj, centers)
 		else:
+
 			newName = getObjectName(obj)
 			newName = newName + "_UNSUB"
 			repositionVerts = self.uiUpdatePositionsRDO.isChecked()
 			pinBorders = self.uiPinBordersCHK.isChecked()
 			rFaces, rVerts, rUVFaces, rUVs = unSubdivide(faces, verts, uvFaces, uvs,
-				hints=hints, repositionVerts=repositionVerts, pinBorders=pinBorders)
+				hints=hints, repositionVerts=repositionVerts, pinBorders=pinBorders, pBar=pBar)
 			createRawObject(newName, rFaces, rVerts, rUVFaces, rUVs)
 
 
