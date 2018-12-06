@@ -3,6 +3,8 @@ import maya.OpenMaya as om
 import maya.cmds as cmds
 import numpy as np
 from ctypes import c_float
+from itertools import groupby, count
+from operator import itemgetter
 
 def getSingleSelection():
 	thing = cmds.ls(sl=True, objectsOnly=True)
@@ -176,7 +178,17 @@ def setAllVerts(obj, newVerts):
 	fnMesh.setPoints(om.MFloatPointArray(ptr, ptCount))
 
 def selectAdjacentEdges(obj, centers):
-	pass
+	sel = []
+	for k, g in groupby(enumerate(centers), lambda (i,x):i-x):
+		adj = list(map(itemgetter(1), g))
+		first, last = adj[0], adj[-1]
+		if first == last:
+			sel.append('{0}.vtx[{1}]'.format(obj, first))
+		else:
+			sel.append('{0}.vtx[{1}:{2}]'.format(obj, first, last))
+
+	edges = cmds.polyListComponentConversion(*sel, fromVertex=True, toEdge=True)
+	cmds.select(*edges, r=True)
 
 def rootWindow():
 	"""

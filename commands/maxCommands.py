@@ -146,7 +146,38 @@ def setAllVerts(obj, newVerts):
 	return True
 
 def selectAdjacentEdges(obj, centers):
-	pass
+	mxs.execute('''
+		function meshCralwer_toBitArray thing = (
+			try (
+				return (thing as bitArray)
+			)
+			catch ()
+		)
+	''')
+	centers = sorted([i+1 for i in centers])
+	vertBA = mxs.meshCralwer_toBitArray(centers)
+	edgeBA = mxs.polyop.getEdgesUsingVert(obj, vertBA)
+
+	selMod = None
+	if list(obj.modifiers):
+		if obj.modifiers[0] == mxs.Mesh_Select:
+			selMod = obj.modifiers[0]
+		elif obj.modifiers[0] == mxs.Poly_Select:
+			selMod = obj.modifiers[0]
+
+	if selMod is None:
+		if mxs.classOf(obj) == mxs.Editable_Mesh:
+			selMod = mxs.addModifier(obj, mxs.Mesh_Select)
+		elif mxs.classOf(obj) == mxs.Editable_Poly:
+			selMod = mxs.addModifier(obj, mxs.Poly_Select)
+
+	if selMod is None:
+		raise RuntimeError("Could not build selection")
+
+	mxs.select(obj)
+	mxs.subObjectLevel = 2
+	obj.selectedEdges = edgeBA
+	mxs.completeRedraw()
 
 def rootWindow():
 	"""

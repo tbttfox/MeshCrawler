@@ -147,7 +147,13 @@ def setAllVerts(obj, newVerts):
 	obj.ActivePrimitive.Geometry.Points.PositionArray = verts
 
 def selectAdjacentEdges(obj, centers):
-	pass
+	subComp = obj.ActivePrimitive.Geometry.Points.SubComponent
+	subComp.ElementArray = sorted(list(centers))
+	cc = subComp.ComponentCollection
+	edges = [edge.Index for edge in cc.NeighborEdges()]
+	subComp = obj.ActivePrimitive.Geometry.Edges.SubComponent
+	subComp.ElementArray = edges
+	xsi.SelectGeometryComponents(subComp)
 
 def rootWindow():
 	"""
