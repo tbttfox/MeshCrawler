@@ -224,13 +224,13 @@ def buildEdgeDict(faces):
 		{vIdx: [vIdx, ...]}: A dictionary keyed from a vert index whose
 			values are adjacent edges
 	"""
-	out = {}
+	edgeDict = {}
 	for face in faces:
 		for f in range(len(face)):
-			ff = out.setdefault(face[f-1], set())
+			ff = edgeDict.setdefault(face[f-1], set())
 			ff.add(face[f])
 			ff.add(face[f-2])
-	return out
+	return edgeDict
 
 def buildNeighborDict(faces):
 	"""
@@ -247,20 +247,24 @@ def buildNeighborDict(faces):
 			values are ordered cycles or fans
 		set(vIdx): A set of vertices that are on the border
 	"""
-	fanDict = {}
+	faceDict = {}
+	edgeDict = {}
 	for face in faces:
 		for i in range(len(face)):
-			fanDict.setdefault(face[i], []).append(face[i+1:] + face[:i])
+			faceDict.setdefault(face[i], []).append(face[i+1:] + face[:i])
+			ff = edgeDict.setdefault(face[i-1], set())
+			ff.add(face[i])
+			ff.add(face[i-2])
 
 	borders = set()
-	out = {}
-	for k, v in fanDict.iteritems():
+	fanDict = {}
+	for k, v in faceDict.iteritems():
 		fans, cycles = mergeCycles(v)
 		for f, c in zip(fans, cycles):
 			if not c:
 				borders.update((f[0], f[-1], k))
-		out[k] = fans
-	return out, borders
+		fanDict[k] = fans
+	return fanDict, edgeDict, borders
 
 def _fanMatch(fan, uFan, dWings):
 	""" Twist a single fan so it matches the uFan if it can """
@@ -288,16 +292,16 @@ def buildLayeredNeighborDicts(faces, uFaces, dWings):
 	for both faces and uFaces which guarantees that the
 	neighbors at the same index are analogous (go in the same direction)
 	"""
-	neighDict, borders = buildNeighborDict(faces)
-	uNeighDict, uBorders = buildNeighborDict(uFaces)
+	neighDict, edgeDict, borders = buildNeighborDict(faces)
+	uNeighDict, uEdgeDict, uBorders = buildNeighborDict(uFaces)
 
 	assert borders >= uBorders, "Somehow the unsubdivided borders contain different vIdxs"
 	for i, (k, uNeigh) in enumerate(uNeighDict.iteritems()):
 		neighDict[k] = _align(neighDict[k], uNeigh, dWings)
 
-	return neighDict, uNeighDict, borders
+	return neighDict, uNeighDict, edgeDict, uEdgeDict, borders
 
-def _findOldPositionBorder(faces, uFaces, verts, uVerts, neighDict, uNeighDict, borders, vIdx, computed):
+def _findOldPositionBorder(faces, uFaces, verts, uVerts, neighDict, uNeighDict, edgeDict, uEdgeDict, borders, vIdx, computed):
 	"""
 	This is the case where vIdx is on the mesh border
 	Updates uVerts in-place
@@ -317,7 +321,7 @@ def _findOldPositionBorder(faces, uFaces, verts, uVerts, neighDict, uNeighDict, 
 	uVerts[vIdx] = 2*verts[vIdx] - ((verts[nei[0]] + verts[nei[1]]) / 2)
 	computed.add(vIdx)
 
-def _findOldPositionSimple(faces, uFaces, verts, uVerts, neighDict, uNeighDict, vIdx, computed):
+def _findOldPositionSimple(faces, uFaces, verts, uVerts, neighDict, uNeighDict, edgeDict, uEdgeDict, vIdx, computed):
 	"""
 	This is the simple case where vIdx has valence >= 4
 	Updates uVerts in-place
@@ -333,8 +337,9 @@ def _findOldPositionSimple(faces, uFaces, verts, uVerts, neighDict, uNeighDict, 
 	"""
 	neigh = neighDict[vIdx][0]
 
-	e = [p for i, p in enumerate(neigh) if i%2 == 0]
-	f = [p for i, p in enumerate(neigh) if i%2 == 1]
+	eTest = edgeDict[vIdx]
+	e = [p for p in neigh if p in eTest]
+	f = [p for p in neigh if p not in eTest]
 
 	es = verts[e].sum(axis=0)
 	fs = verts[f].sum(axis=0)
@@ -348,7 +353,7 @@ def _findOldPositionSimple(faces, uFaces, verts, uVerts, neighDict, uNeighDict, 
 	uVerts[vIdx] = vk
 	computed.add(vIdx)
 
-def _findOldPosition3Valence(faces, uFaces, verts, uVerts, neighDict, uNeighDict, vIdx, computed):
+def _findOldPosition3Valence(faces, uFaces, verts, uVerts, neighDict, uNeighDict, edgeDict, uEdgeDict, vIdx, computed):
 	"""
 	This is the complex case where vIdx has valence == 3
 	Updates uVerts in-place
@@ -368,36 +373,38 @@ def _findOldPosition3Valence(faces, uFaces, verts, uVerts, neighDict, uNeighDict
 	"""
 	neigh = neighDict[vIdx][0]
 	uNeigh = uNeighDict[vIdx][0]
-	eNeigh = [n for i, n in enumerate(neigh) if i%2 == 0]
-	fNeigh = [n for i, n in enumerate(neigh) if i%2 == 1]
-	ueNeigh = [n for i, n in enumerate(uNeigh) if i%2 == 0]
-	#ufNeigh = [n for i, n in enumerate(uNeigh) if i%2 == 1]
+
+	eTest = edgeDict[vIdx]
+	eNeigh = [n for n in neigh if n in eTest]
+	fNeigh = [n for n in neigh if n not in eTest]
+
+	ueTest = uEdgeDict[vIdx]
+	ueNeigh = [n for n in uNeigh if n in ueTest]
+	#ufNeigh = [n for n in uNeigh if n not in ueTest]
 
 	intr = computed.intersection(ueNeigh)
 	if intr:
-		try:
-			# Easy valence 3 case. I only need
-			# The computed new neighbor
-			# The midpoint on the edge to that neighbor
-			# The "face" verts neighboring the midpoint
+		# Easy valence 3 case. I only need
+		# The computed new neighbor
+		# The midpoint on the edge to that neighbor
+		# The "face" verts neighboring the midpoint
 
-			# Get the matching subbed an unsubbed neighbor indexes
-			uNIdx = intr.pop()
-			nIdx = eNeigh[ueNeigh.index(uNIdx)]
+		# Get the matching subbed an unsubbed neighbor indexes
+		uNIdx = intr.pop()
+		nIdx = eNeigh[ueNeigh.index(uNIdx)]
 
-			# Get the "face" verts next to the subbed neighbor
-			xx = neigh.index(nIdx)
-			fnIdxs = (neigh[xx-1], neigh[(xx+1)%len(neigh)])
+		# Get the "face" verts next to the subbed neighbor
+		xx = neigh.index(nIdx)
+		fnIdxs = (neigh[xx-1], neigh[(xx+1)%len(neigh)])
 
-			# Then compute
-			#vk = 4*k1e - ke - k1fNs[0] - k1fNs[1]
-			vka = uVerts[uNIdx] + verts[fnIdxs[0]] + verts[fnIdxs[1]]
-			vkb = verts[nIdx] * 4
-			uVerts[vIdx] = vkb - vka
-			computed.add(vIdx)
-			return True
-		except:
-			return False
+		# Then compute
+		#vk = 4*k1e - ke - k1fNs[0] - k1fNs[1]
+		vka = uVerts[uNIdx] + verts[fnIdxs[0]] + verts[fnIdxs[1]]
+		vkb = verts[nIdx] * 4
+		uVerts[vIdx] = vkb - vka
+		computed.add(vIdx)
+		return True
+
 	else:
 		# The Hard valence 3 case. Made even harder
 		# because the paper has a mistake in it
@@ -422,7 +429,9 @@ def _findOldPosition3Valence(faces, uFaces, verts, uVerts, neighDict, uNeighDict
 		fCtrIdx = None
 		for x, v in enumerate(fNeigh):
 			# working with neigh, but should only ever contain uNeigh indexes
-			origFace = set([n for i, n in enumerate(neighDict[v][0]) if i%2 == 1])
+			eTest = edgeDict[vIdx]
+			origFace = set([n for n in neighDict[v][0] if n not in eTest])
+
 			check = (origFace - set(ueNeigh)) - set([vIdx])
 			if computed >= check:
 				fCtrIdx = v
@@ -537,7 +546,7 @@ def deleteCenters(meshFaces, uvFaces, centerDel, pBar=None):
 
 	return newFaces, nUVFaces, wings, uvWings
 
-def fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned, pBar=None):
+def fixVerts(faces, uFaces, verts, neighDict, uNeighDict, edgeDict, uEdgeDict, borders, pinned, pBar=None):
 	"""
 	Given the faces, vertex positions, and the point indices that
 	were created at the face centers for a subdivision step
@@ -575,10 +584,10 @@ def fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned, pBar=
 		elif idx in pinned:
 			pass
 		elif idx in borders:
-			_findOldPositionBorder(faces, uFaces, verts, uVerts, neighDict, uNeighDict, borders, idx, computed)
+			_findOldPositionBorder(faces, uFaces, verts, uVerts, neighDict, uNeighDict, edgeDict, uEdgeDict, borders, idx, computed)
 			i += 1
 		elif sum(map(len, neighDict[idx])) > 6: # if valence > 3
-			_findOldPositionSimple(faces, uFaces, verts, uVerts, neighDict, uNeighDict, idx, computed)
+			_findOldPositionSimple(faces, uFaces, verts, uVerts, neighDict, uNeighDict, edgeDict, uEdgeDict, idx, computed)
 			i += 1
 		else:
 			v3Idxs.append(idx)
@@ -588,7 +597,7 @@ def fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned, pBar=
 		updated = False
 		rem = set()
 		for idx in v3Idxs:
-			up = _findOldPosition3Valence(faces, uFaces, verts, uVerts, neighDict, uNeighDict, idx, computed)
+			up = _findOldPosition3Valence(faces, uFaces, verts, uVerts, neighDict, uNeighDict, edgeDict, uEdgeDict, idx, computed)
 			if not up:
 				continue
 			if pBar is not None:
@@ -716,21 +725,21 @@ def unSubdivide(faces, verts, uvFaces, uvs, hints=None, repositionVerts=True, pi
 		if pBar is not None:
 			pBar.setLabelText("Building Correspondences")
 			QApplication.processEvents()
-		neighDict, uNeighDict, borders = buildLayeredNeighborDicts(faces, uFaces, dWings)
+		neighDict, uNeighDict, edgeDict, uEdgeDict, borders = buildLayeredNeighborDicts(faces, uFaces, dWings)
 		pinned = set(borders) if pinBorders else []
 		if pBar is not None:
 			pBar.setLabelText("Fixing Vert Positions")
 			QApplication.processEvents()
-		uVerts = fixVerts(faces, uFaces, verts, neighDict, uNeighDict, borders, pinned, pBar=pBar)
+		uVerts = fixVerts(faces, uFaces, verts, neighDict, uNeighDict, edgeDict, uEdgeDict, borders, pinned, pBar=pBar)
 
 		# Handle the UVs
 		if uvFaces is not None:
-			uvNeighDict, uUVNeighDict, uvBorders = buildLayeredNeighborDicts(uvFaces, uUVFaces, uvDWings)
+			uvNeighDict, uUVNeighDict, uvEdgeDict, uvUEdgeDict, uvBorders = buildLayeredNeighborDicts(uvFaces, uUVFaces, uvDWings)
 			uvPinned = getUVPins(faces, borders, uvFaces, uvBorders, pinBorders)
 			if pBar is not None:
 				pBar.setLabelText("Fixing UV Positions")
 				QApplication.processEvents()
-			uUVs = fixVerts(uvFaces, uUVFaces, uvs, uvNeighDict, uUVNeighDict, uvBorders, uvPinned, pBar=pBar)
+			uUVs = fixVerts(uvFaces, uUVFaces, uvs, uvNeighDict, uUVNeighDict, uvEdgeDict, uvUEdgeDict, uvBorders, uvPinned, pBar=pBar)
 
 	rFaces, rVerts, rUVFaces, rUVs = collapse(uFaces, uVerts, uUVFaces, uUVs)
 

@@ -35,7 +35,10 @@ def polyManager(thing):
 
 
 def getSingleSelection():
-	return mxs.selection[0]
+	sel = mxs.selection
+	if not sel:
+		return None
+	return sel[0]
 
 def getObjectByName(name):
 	return mxs.getNodeByName(name)
@@ -55,15 +58,25 @@ def getVerts(thing):
 	isMesh = thingIsMesh(thing)
 	op = mxs if isMesh else mxs.polyop
 	maxVerts = [op.getVert(thing, i + 1) for i in xrange(op.getNumVerts(thing))]
-	return np.array([(p.x, p.y, p.z) for p in maxVerts])
+	ret = np.array([(p.x, p.y, p.z) for p in maxVerts])
 
-def getUVs(thing):
-	uvCount = mxs.polyop.getNumMapVerts(thing, 1)
-	faceCount = mxs.polyop.getNumMapFaces(thing, 1)
+	offset = np.array([(thing.pos.x, thing.pos.y, thing.pos.z)])
+	return np.array([(p.x, p.y, p.z) for p in maxVerts]) - offset
 
-	uvPoints = [mxs.polyop.getMapVert(thing, 1, i+1) for i in xrange(uvCount)]
-	uvs = [(i.x, i.y) for i in uvPoints]
-	uvFaces = [mxs.polyop.getMapFace(thing, 1, i+1) for i in xrange(faceCount)]
+def getUVs(obj):
+	with polyManager(obj) as thing:
+		uvCount = mxs.polyop.getNumMapVerts(thing, 1)
+		if uvCount in (0, 1):
+			return None, None
+		faceCount = mxs.polyop.getNumMapFaces(thing, 1)
+
+		uvPoints = [mxs.polyop.getMapVert(thing, 1, i+1) for i in xrange(uvCount)]
+		uvs = np.array([(i.x, i.y) for i in uvPoints])
+
+		uvFaces = []
+		for i in xrange(faceCount):
+			uvf = mxs.polyop.getMapFace(thing, 1, i+1)
+			uvFaces.append([i-1 for i in uvf])
 
 	return uvs, uvFaces
 
@@ -73,7 +86,7 @@ def createRawObject(name, faces, verts, uvFaces, uvs):
 	try:
 		mm.name = name
 		for i in xrange(len(verts)):
-			mxs.meshop.setvert(mm, i+1, mxs.Point3(*verts[i]))
+			mxs.meshop.setvert(mm, i+1, mxs.Point3(float(verts[i][0]), float(verts[i][1]), float(verts[i][2])))
 
 		mxs.convertTo(mm, mxs.PolyMeshObject)
 		for face in faces:
@@ -81,12 +94,12 @@ def createRawObject(name, faces, verts, uvFaces, uvs):
 			mxs.polyop.createPolygon(mm, fPlus)
 
 		if uvs is not None:
-			#mxs.polyop.defaultMapFaces(mm, 1)
+			mxs.polyop.defaultMapFaces(mm, 1)
 			mxs.polyop.setNumMapVerts(mm, 1, len(uvs), keep=False)
 			mxs.polyop.setNumMapFaces(mm, 1, len(uvFaces), keep=False)
 
 			for i in xrange(len(uvs)):
-				mxs.polyop.setMapVert(mm, 1, i+1, mxs.Point3(*uvs[i]))
+				mxs.polyop.setMapVert(mm, 1, i+1, mxs.Point3(float(uvs[i][0]), float(uvs[i][1]), 0.0))
 
 			mxs.convertTo(mm, mxs.PolyMeshObject)
 			for f, face in enumerate(uvFaces):
@@ -138,7 +151,7 @@ def setAllVerts(obj, newVerts):
 		obj = obj.actualBaseObject
 	if mxs.classOf(obj) in [mxs.Editable_Poly, mxs.PolyMeshObject]:
 		maxAll = mxs.execute('#all')
-		maxPos = [mxs.point3(*i) for i in newVerts]
+		maxPos = [mxs.point3(float(i[0]), float(i[1]), float(i[2])) for i in newVerts]
 		mxs.polyop.setVert(obj, maxAll, maxPos)
 	else:
 		for i, v in enumerate(newVerts):
@@ -154,30 +167,18 @@ def selectAdjacentEdges(obj, centers):
 			catch ()
 		)
 	''')
-	centers = sorted([i+1 for i in centers])
-	vertBA = mxs.meshCralwer_toBitArray(centers)
+	selectModifier = mxs.edit_poly()
+	mxs.addmodifier(obj, selectModifier)
+
+	mcenters = sorted([i+1 for i in centers])
+	vertBA = mxs.meshCralwer_toBitArray(mcenters)
 	edgeBA = mxs.polyop.getEdgesUsingVert(obj, vertBA)
+	emptyBA = mxs.meshCralwer_toBitArray([])
+	edge = mxs.execute("#edge")
 
-	selMod = None
-	if list(obj.modifiers):
-		if obj.modifiers[0] == mxs.Mesh_Select:
-			selMod = obj.modifiers[0]
-		elif obj.modifiers[0] == mxs.Poly_Select:
-			selMod = obj.modifiers[0]
-
-	if selMod is None:
-		if mxs.classOf(obj) == mxs.Editable_Mesh:
-			selMod = mxs.addModifier(obj, mxs.Mesh_Select)
-		elif mxs.classOf(obj) == mxs.Editable_Poly:
-			selMod = mxs.addModifier(obj, mxs.Poly_Select)
-
-	if selMod is None:
-		raise RuntimeError("Could not build selection")
-
-	mxs.select(obj)
-	mxs.subObjectLevel = 2
-	obj.selectedEdges = edgeBA
-	mxs.completeRedraw()
+	selectModifier.setEPolySelLevel(edge)
+	selectModifier.setSelection(edge, emptyBA)
+	selectModifier.select(edge, edgeBA)
 
 def rootWindow():
 	"""

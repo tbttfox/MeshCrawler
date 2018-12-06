@@ -18,7 +18,7 @@ def getFaces(thing):
 	while ptr < len(faceArray):
 		count = faceArray[ptr]
 		ptr += 1
-		indices = reversed(faceArray[ptr:ptr+count])
+		indices = list(reversed(faceArray[ptr:ptr+count]))
 		ptr += count
 		faces.append(indices)
 	return faces
@@ -30,12 +30,12 @@ def getVerts(thing):
 
 def _getUVs(thing):
 	""" Get the direct xsi uvws (without indexing) """
-	texName = "Texture_Projection"
 	texProp = None
 	textureCls = [cluster for cluster in thing.ActivePrimitive.Geometry.Clusters if cluster.Type == "sample"]
 	for cluster in textureCls:
-		texProp = cluster.Properties(texName)
-		if texProp:
+		spaces = [i for i in cluster.Properties if i.Type == 'uvspace']
+		if spaces:
+			texProp = spaces[0]
 			break
 
 	if texProp is None:
@@ -45,6 +45,8 @@ def _getUVs(thing):
 
 def getUVs(thing):
 	bigUvs = _getUVs(thing)
+	if bigUvs is None:
+		return None, None
 
 	# Make a dict that keeps track of the first index
 	# each uv value is found at
@@ -59,6 +61,7 @@ def getUVs(thing):
 	uvs = [None] * len(uvd)
 	for uv, idx in uvd.iteritems():
 		uvs[idx] = uv
+	uvs = np.array(uvs)
 
 	# loop over the faces
 	faces = getFaces(thing)
@@ -89,7 +92,7 @@ def _createRawObject(name, faces, verts, uvws=None):
 		if texProp is not None:
 			xsi.FreezeObj(texProp)
 			if len(uvws) == texProp.Elements.Count:
-				texProp.Elements.Array = zip(*uvws)
+				texProp.Elements.Array = uvws
 			xsi.FreezeObj(texProp)
 
 	return dup
@@ -101,11 +104,13 @@ def createRawObject(name, faces, verts, uvFaces, uvs):
 		faceArray.append(len(face))
 		faceArray.extend(reversed(face))
 
+	uvws = None
 	if uvs is not None:
 		uvws = [(i[0], i[1], 0.0) for i in uvs]
 		uvws = [uvws[i] for i in chain.from_iterable(map(reversed, uvFaces))]
+		uvws = zip(*uvws)
 
-	return _createRawObject(name, faces, verts, uvws)
+	return _createRawObject(name, faceArray, vertArray, uvws)
 
 def selectVerts(obj, idx):
 	subComp = obj.ActivePrimitive.Geometry.Points.SubComponent
@@ -126,14 +131,14 @@ def getVertSelection(obj):
 		sc = i.SubComponent
 		thing = sc.Parent3DObject
 		if thing.IsEqualTo(obj):
-			ea = list(sc.ElementArray)
-			if ea:
-				return ea[0]
+			return list(sc.ElementArray)
 	return None
 
 def cloneObject(obj, name):
 	vertArray, faceArray = obj.ActivePrimitive.Geometry.Get2()
 	uvws = _getUVs(obj)
+	if uvws is not None:
+		uvws = zip(*uvws)
 	return _createRawObject(name, faceArray, vertArray, uvws=uvws)
 
 def freezeObject(obj):

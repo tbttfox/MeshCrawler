@@ -359,7 +359,7 @@ def autoCrawlMeshes(orderMesh, shapeMesh, skipMismatchedIslands=False, pBar=None
 			check += 1
 			try:
 				print
-				print "Checking SM", zip(*sm)
+				print "Checking Vertex Match", zip(*sm)
 				match = matchByTopology(orderMesh, shapeMesh, sm,
 					matchedNum=matchCount, vertNum=len(orderMesh.vertArray), pBar=pBar)
 			except TopologyMismatch as err:

@@ -124,7 +124,7 @@
       <item>
        <widget class="QRadioButton" name="uiDeleteEdgesRDO">
         <property name="text">
-         <string>Delete Edges</string>
+         <string>Clone and Delete Edges</string>
         </property>
         <property name="checked">
          <bool>false</bool>
@@ -134,7 +134,7 @@
       <item>
        <widget class="QRadioButton" name="uiUpdatePositionsRDO">
         <property name="text">
-         <string>Update Vertex Positions</string>
+         <string>Clone and Update Vertex Positions</string>
         </property>
         <property name="checked">
          <bool>true</bool>

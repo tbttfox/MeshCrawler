@@ -389,8 +389,9 @@ class MatchTopologyWidget(QWidget):
 		allMatch = sorted(allMatch)
 
 		orderObj = self._orderObject()
-		shapeVerts = getVerts(self._shapeObject())
-		orderVerts = getVerts(self._orderObject())
+		shapeObj = self._shapeObject()
+		shapeVerts = getVerts(shapeObj)
+		orderVerts = getVerts(orderObj)
 
 		nn = str(self.uiOutputLINE.text())
 		fixitObject = cloneObject(orderObj, nn)

@@ -49,7 +49,6 @@ class Mesh(object):
 
 		Float Data:
 			vertArray			: array of 3d floats
-			normalArray			: array of 3d floats
 			uvMap				: map of d[name] => array of 2d floats
 
 		Face Data:
@@ -77,7 +76,7 @@ class Mesh(object):
 		# load the float data
 		self.vertArray = verts
 		self.uvMap = uvMap or {}
-		if uvs:
+		if uvs is not None:
 			self.uvMap['default'] = uvs
 
 		# build the empty face data
