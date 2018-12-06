@@ -247,24 +247,24 @@ def buildNeighborDict(faces):
 			values are ordered cycles or fans
 		set(vIdx): A set of vertices that are on the border
 	"""
-	faceDict = {}
+	fanDict = {}
 	edgeDict = {}
 	for face in faces:
 		for i in range(len(face)):
-			faceDict.setdefault(face[i], []).append(face[i+1:] + face[:i])
+			fanDict.setdefault(face[i], []).append(face[i+1:] + face[:i])
 			ff = edgeDict.setdefault(face[i-1], set())
 			ff.add(face[i])
 			ff.add(face[i-2])
 
 	borders = set()
-	fanDict = {}
-	for k, v in faceDict.iteritems():
+	out = {}
+	for k, v in fanDict.iteritems():
 		fans, cycles = mergeCycles(v)
 		for f, c in zip(fans, cycles):
 			if not c:
 				borders.update((f[0], f[-1], k))
-		fanDict[k] = fans
-	return fanDict, edgeDict, borders
+		out[k] = fans
+	return out, edgeDict, borders
 
 def _fanMatch(fan, uFan, dWings):
 	""" Twist a single fan so it matches the uFan if it can """
@@ -296,6 +296,7 @@ def buildLayeredNeighborDicts(faces, uFaces, dWings):
 	uNeighDict, uEdgeDict, uBorders = buildNeighborDict(uFaces)
 
 	assert borders >= uBorders, "Somehow the unsubdivided borders contain different vIdxs"
+
 	for i, (k, uNeigh) in enumerate(uNeighDict.iteritems()):
 		neighDict[k] = _align(neighDict[k], uNeigh, dWings)
 
@@ -698,12 +699,11 @@ def unSubdivide(faces, verts, uvFaces, uvs, hints=None, repositionVerts=True, pi
 
 	eNeigh = buildEdgeDict(faces)
 
-	if pBar is not None:
-		pBar.show()
-		pBar.setLabelText("Getting Hints")
-		QApplication.processEvents()
-
 	if hints is None:
+		if pBar is not None:
+			pBar.show()
+			pBar.setLabelText("Getting Hints")
+			QApplication.processEvents()
 		borders = getBorders(faces)
 		hints = buildUnsubdivideHints(faces, eNeigh, borders, pBar=None) # Purposely no PBar
 

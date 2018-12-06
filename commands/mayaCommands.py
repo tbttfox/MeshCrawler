@@ -75,7 +75,7 @@ def getUVs(thing):
 	for i in range(meshFn.numPolygons()):
 		meshFn.getPolygonVertices(i, vIdx)
 		uvFace = []
-		for j in reversed(xrange(vIdx.length())):
+		for j in xrange(vIdx.length()):
 			meshFn.getPolygonUVid(i, j, uvIdxPtr)
 			uvIdx = util.getInt(uvIdxPtr)
 			if uvIdx >= uArray.length() or uvIdx < 0:
@@ -83,7 +83,7 @@ def getUVs(thing):
 			uvFace.append(uvIdx)
 		uvFaces.append(uvFace)
 
-	uvs = [(uArray[i], vArray[i]) for i in xrange(uArray.length())]
+	uvs = np.array([(uArray[i], vArray[i]) for i in xrange(uArray.length())])
 	return uvs, uvFaces
 
 def createRawObject(name, faces, verts, uvFaces, uvs):
@@ -115,7 +115,7 @@ def createRawObject(name, faces, verts, uvFaces, uvs):
 		for uv in uvs:
 			us.append(uv[0])
 			vs.append(uv[1])
-		fnMesh.setUvs(us, vs)
+		fnMesh.setUVs(us, vs)
 
 		uvConnects = om.MIntArray()
 		for uvFace in uvFaces:
