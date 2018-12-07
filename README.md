@@ -11,3 +11,12 @@ All of the algorithms are written in pure Python (and numpy) with an abstraction
 
 Sorry Maya guys, you'll have to install a version of numpy to make this work.
 
+
+## Installation
+* Maya
+    * Download the zip file from github and extract. 
+    * Rename the folder that contains all the python files from `MeshCrawler-master` to `MeshCrawler`
+    * Move that folder into your `Documents\maya\scripts` folder
+    * Copy the contents of `shelfBtn.py` into a shelf button
+    
+
