@@ -127,7 +127,7 @@
          <string>Clone and Delete Edges</string>
         </property>
         <property name="checked">
-         <bool>false</bool>
+         <bool>true</bool>
         </property>
        </widget>
       </item>
@@ -137,7 +137,7 @@
          <string>Clone and Update Vertex Positions</string>
         </property>
         <property name="checked">
-         <bool>true</bool>
+         <bool>false</bool>
         </property>
        </widget>
       </item>
@@ -161,6 +161,9 @@
      </item>
      <item>
       <widget class="QCheckBox" name="uiPinBordersCHK">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
        <property name="text">
         <string>Pin Borders</string>
        </property>

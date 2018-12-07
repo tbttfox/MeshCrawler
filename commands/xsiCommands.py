@@ -28,19 +28,23 @@ def getVerts(thing):
 	verts = np.array(vertArray)
 	return verts.T
 
-def _getUVs(thing):
-	""" Get the direct xsi uvws (without indexing) """
-	texProp = None
+def _getTexProps(thing, name=None):
 	textureCls = [cluster for cluster in thing.ActivePrimitive.Geometry.Clusters if cluster.Type == "sample"]
+	out = []
 	for cluster in textureCls:
 		spaces = [i for i in cluster.Properties if i.Type == 'uvspace']
 		if spaces:
-			texProp = spaces[0]
-			break
+			out.extend(spaces)
+	if name is not None:
+		out = [i for i in out if i.name == name]
+	return out
 
-	if texProp is None:
+def _getUVs(thing):
+	""" Get the direct xsi uvws (without indexing) """
+	texProps = _getTexProps(thing)
+	if not texProps:
 		return None
-
+	texProp = texProps[0]
 	return  zip(*texProp.Elements.Array)
 
 def getUVs(thing):
@@ -82,16 +86,11 @@ def _createRawObject(name, faces, verts, uvws=None):
 		texName = "Texture_Projection"
 		xsi.CreateProjection(dup, "", "", "", texName, True, "", "")
 
-		texProp = None
-		textureCls = [cluster for cluster in dup.ActivePrimitive.Geometry.Clusters if cluster.Type == "sample"]
-		for cluster in textureCls:
-			texProp = cluster.Properties(texName)
-			if texProp:
-				break
-
-		if texProp is not None:
+		texProps = _getTexProps(dup, name=texName)
+		if texProps:
+			texProp = texProps[0]
 			xsi.FreezeObj(texProp)
-			if len(uvws) == texProp.Elements.Count:
+			if len(uvws[0]) == texProp.Elements.Count:
 				texProp.Elements.Array = uvws
 			xsi.FreezeObj(texProp)
 
