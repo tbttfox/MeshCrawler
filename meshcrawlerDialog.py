@@ -378,7 +378,7 @@ class MatchTopologyWidget(QWidget):
 
 		if not match:
 			pBar.close()
-			print msg
+			QMessageBox.warning(self, title, msg)
 			return
 
 		pBar.setValue(0)
