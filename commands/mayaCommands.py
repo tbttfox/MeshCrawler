@@ -2,7 +2,7 @@ import re
 import maya.OpenMaya as om
 import maya.cmds as cmds
 import numpy as np
-from ctypes import c_float
+from ctypes import c_double
 from itertools import groupby, count
 from operator import itemgetter
 
@@ -36,21 +36,28 @@ def getFaces(thing):
 	return faces
 
 def getVerts(thing):
+	# Get the api objects
 	sel = om.MSelectionList()
 	sel.add(thing)
 	dagPath = om.MDagPath()
 	sel.getDagPath(0, dagPath)
-
 	fnMesh = om.MFnMesh(dagPath)
-	# rawPts is a SWIG float pointer
-	rawPts = fnMesh.getRawPoints()
+
+	# Get the mpoints from maya
+	mPoints = om.MPointArray()
+	fnMesh.getPoints(mPoints)
+
+	# Build the scriptUtil object
 	ptCount = fnMesh.numVertices()
+	util = om.MScriptUtil()
+	util.createFromList([0.0] * (4 * ptCount), 4 * ptCount)
+	ptr = util.asDouble4Ptr()
+	mPoints.get(ptr)
 
-	cta = (c_float * 3 * ptCount).from_address(int(rawPts))
+	# Get the scriptUtil object as a pointer in numpy
+	cta = (c_double * 4 * ptCount).from_address(int(ptr))
 	out = np.ctypeslib.as_array(cta)
-
-	# for safety, make a copy of out so I don't corrupt memory
-	return np.copy(out)
+	return out[:, :3].copy()
 
 def getUVs(thing):
 	# Get the MDagPath from the name of the mesh
@@ -165,17 +172,17 @@ def setAllVerts(obj, newVerts):
 	ptCount = fnMesh.numVertices()
 	util = om.MScriptUtil()
 	util.createFromList([0.0] * (4 * ptCount), 4 * ptCount)
-	ptr = util.asFloat4Ptr()
+	ptr = util.asDouble4Ptr()
 
 	# Get the scriptUtil object as a pointer in numpy
-	cta = (c_float * 4 * ptCount).from_address(int(ptr))
+	cta = (c_double * 4 * ptCount).from_address(int(ptr))
 	out = np.ctypeslib.as_array(cta)
 
 	# Copy the input values into the pointer
 	out[:, :3] = newVerts
 
 	# Set the vert positions
-	fnMesh.setPoints(om.MFloatPointArray(ptr, ptCount))
+	fnMesh.setPoints(om.MPointArray(ptr, ptCount))
 
 def selectAdjacentEdges(obj, centers):
 	sel = []
