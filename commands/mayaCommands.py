@@ -186,7 +186,7 @@ def setAllVerts(obj, newVerts):
 
 def selectAdjacentEdges(obj, centers):
 	sel = []
-	for k, g in groupby(enumerate(centers), lambda (i,x):i-x):
+	for k, g in groupby(enumerate(centers), lambda v: v[0] - v[1]):
 		adj = list(map(itemgetter(1), g))
 		first, last = adj[0], adj[-1]
 		if first == last:
